@@ -143,6 +143,16 @@ PROMPT_BASE = [
     "individual hair strands",
     "natural realistic lighting",
     "high detail",
+    "full body",
+    "full-length portrait",
+    "head-to-toe",
+    "entire body visible",
+    "feet fully visible",
+    "standing full figure",
+    "camera several meters away",
+    "vertical full-body composition",
+    "generous space around the entire figure",
+    "5-10 percent framing margin above head and below feet",
 ]
 
 NEGATIVE_PROMPT = (
@@ -151,13 +161,29 @@ NEGATIVE_PROMPT = (
     "doll, figurine, painting, sketch, plastic skin, waxy skin, oversmoothed skin, "
     "deformed face, distorted face, asymmetrical face, bad eyes, malformed eyes, "
     "bad anatomy, extra limbs, extra fingers, missing fingers, duplicate body, "
+    "cropped, close-up, medium shot, upper body, bust shot, portrait crop, "
+    "cut off legs, cut off feet, feet outside frame, body cropped, out of frame, "
+    "zoomed in, tight framing, partial body, missing lower body, missing feet, "
     "blurry, low quality, oversaturated, text, watermark"
 )
 
 
 def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0):
     base = prompt_base if prompt_base is not None else PROMPT_BASE
-    parts = [*base, str(clothing or "casual clothes"), str(scene or "studio"), str(pose or "portrait")]
+    # Keep the subject fully inside the vertical frame. User-provided pose/scene/clothing
+    # are appended after the composition requirements so they do not silently replace them.
+    composition = [
+        "full body",
+        "head-to-toe",
+        "entire figure visible in frame",
+        "both feet visible",
+        "no cropped body parts",
+        "full-length standing shot",
+        "camera positioned far enough away to fit the entire figure",
+        "vertical full-body framing",
+        "small breathing room above the head and below the feet",
+    ]
+    parts = [*base, *composition, str(clothing or "casual clothes"), str(scene or "studio"), str(pose or "full-body standing pose")]
     if extra:
         parts.append(str(extra).strip())
     parts.append("natural candid variation" if variation % 2 else "natural realistic pose")
