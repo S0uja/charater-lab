@@ -244,6 +244,107 @@ def launch_comfy():
     subprocess.Popen([str(py), str(main)], cwd=str(ROOT / "ComfyUI"), creationflags=subprocess.CREATE_NEW_CONSOLE)
     return "◌ Запуск ComfyUI…"
 
+
+# ============================================================
+# LoRA Test backend
+# ============================================================
+
+def lora_output_files(name):
+    p = char_dir(name) / "output"
+    return sorted([x for x in p.glob("*.safetensors") if x.is_file()],
+                  key=lambda x: x.stat().st_mtime, reverse=True)
+
+def lora_test_folder(name):
+    p = char_dir(name) / "samples" / "lora_test"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+def comfy_lora_folder():
+    p = ROOT / "ComfyUI" / "models" / "loras"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+def prepare_lora_for_comfy(lora_path):
+    src = Path(lora_path).resolve()
+    root = CHAR_ROOT.resolve()
+    if not src.exists() or src.suffix.lower() != ".safetensors":
+        raise RuntimeError("LoRA файл не найден.")
+    if not str(src).startswith(str(root)):
+        raise RuntimeError("Недопустимый путь LoRA.")
+    dst = comfy_lora_folder() / src.name
+    if not dst.exists() or dst.stat().st_size != src.stat().st_size or dst.stat().st_mtime_ns < src.stat().st_mtime_ns:
+        shutil.copy2(src, dst)
+    return dst
+
+def list_lora_tests(name):
+    folder = lora_test_folder(name)
+    files = sorted(
+        [x for x in folder.iterdir() if x.suffix.lower() in {".png",".jpg",".jpeg",".webp"}],
+        key=lambda x: x.stat().st_mtime, reverse=True
+    )
+    return [{"name":x.name,"url":"/media/"+str(x.relative_to(CHAR_ROOT)).replace("\\","/")} for x in files]
+
+def build_lora_test_workflow(model_name, lora_name, prompt, negative, width, height, strength, seed, steps, cfg):
+    info = object_info()
+    ckpt = choose_name(info, "CheckpointLoaderSimple", model_name, strict=True)
+    if not ckpt:
+        raise RuntimeError(f"ComfyUI не нашёл базовую модель: {model_name}")
+    lora_node = info.get("LoraLoader", {})
+    req = lora_node.get("input", {}).get("required", {})
+    available = []
+    if "lora_name" in req and isinstance(req["lora_name"], list) and req["lora_name"]:
+        first = req["lora_name"][0]
+        if isinstance(first, list):
+            available = first
+    selected_lora = next((x for x in available if str(x).lower() == str(lora_name).lower()), lora_name)
+    nodes = {
+        "1": {"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":ckpt}},
+        "2": {"class_type":"LoraLoader","inputs":{"model":["1",0],"clip":["1",1],"lora_name":selected_lora,"strength_model":float(strength),"strength_clip":float(strength)}},
+        "3": {"class_type":"CLIPTextEncode","inputs":{"text":prompt,"clip":["2",1]}},
+        "4": {"class_type":"CLIPTextEncode","inputs":{"text":negative,"clip":["2",1]}},
+        "5": {"class_type":"EmptyLatentImage","inputs":{"width":int(width),"height":int(height),"batch_size":1}},
+        "6": {"class_type":"KSampler","inputs":{"seed":int(seed),"steps":int(steps),"cfg":float(cfg),"sampler_name":"dpmpp_2m","scheduler":"karras","denoise":1.0,"model":["2",0],"positive":["3",0],"negative":["4",0],"latent_image":["5",0]}},
+        "7": {"class_type":"VAEDecode","inputs":{"samples":["6",0],"vae":["1",2]}},
+        "8": {"class_type":"SaveImage","inputs":{"filename_prefix":"CharacterLab/LoRA_Test","images":["7",0]}}
+    }
+    return {"prompt":nodes}
+
+def run_lora_test(params):
+    name = safe_name(params.get("name","Character_01"))
+    lora_path = Path(params.get("lora_path","")).resolve()
+    if not comfy_online():
+        raise RuntimeError("ComfyUI не запущен. Запустите его на 127.0.0.1:8188.")
+    if not lora_path.exists():
+        raise RuntimeError("Выбранная LoRA не найдена.")
+    comfy_lora = prepare_lora_for_comfy(lora_path)
+    prompt = str(params.get("prompt","")).strip()
+    negative = str(params.get("negative","")).strip()
+    width = int(params.get("width",512))
+    height = int(params.get("height",768))
+    strength = float(params.get("strength",0.8))
+    steps = int(params.get("steps",28))
+    cfg = float(params.get("cfg",6.0))
+    count = max(1, min(4, int(params.get("count",1))))
+    seed_base = int(params.get("seed",0))
+    if seed_base <= 0:
+        seed_base = int(time.time() * 1000) % 2147483647
+    folder = lora_test_folder(name)
+    results=[]
+    for i in range(count):
+        seed = seed_base + i * 9973
+        wf = build_lora_test_workflow("NoobAI-XL-v1.1.safetensors", comfy_lora.name, prompt, negative, width, height, strength, seed, steps, cfg)
+        pid = submit(wf)
+        history = wait_history(pid, timeout=1800)
+        for node in history.get("outputs", {}).values():
+            for item in node.get("images", []):
+                r = requests.get(COMFY_URL+"/view", params={"filename":item["filename"],"subfolder":item.get("subfolder",""),"type":item.get("type","output")}, timeout=60)
+                r.raise_for_status()
+                ext=Path(item["filename"]).suffix or ".png"
+                out=folder/(f"test_{int(time.time())}_{i+1}_{uuid.uuid4().hex[:6]}{ext}")
+                out.write_bytes(r.content)
+                results.append({"name":out.name,"url":"/media/"+str(out.relative_to(CHAR_ROOT)).replace("\\","/")})
+    return {"items":results,"lora":str(lora_path),"copied_to":str(comfy_lora),"seed":seed_base}
+
 def find_free_port(start=7860, end=7880):
     import socket
     for port in range(start, end + 1):
@@ -604,7 +705,7 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 .gallery{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;min-height:170px}
 .empty{grid-column:1/-1;min-height:170px;border:1px dashed #30363d;border-radius:11px;display:grid;place-items:center;color:#596168;font-size:9px}
 .tile{position:relative;aspect-ratio:2/3;border-radius:10px;overflow:hidden;border:1px solid #30363d;background:#111823}
-.tile img{width:100%;height:100%;object-fit:cover;display:block}.tile.selected{outline:2px solid var(--accent);outline-offset:2px}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}.tile-meta{position:absolute;left:6px;right:6px;bottom:6px;padding:5px 6px;border-radius:6px;background:#0b0f13cc;color:#d6dbe2;font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile.selected{outline:2px solid var(--accent);outline-offset:2px}
 .tile.waiting{border-style:dashed;background:#0f1318}.slot-placeholder{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#59616a;background:linear-gradient(145deg,#101419,#151a20)}.slot-placeholder span{font-size:20px;font-weight:800;color:#3d454e}.slot-placeholder small{font-size:8px}.slot-index{position:absolute;left:7px;top:7px;padding:4px 6px;border-radius:6px;background:#0b0f13cc;color:#9ca5ae;font-size:8px;z-index:2}.tile.retrying img{filter:blur(16px);opacity:.38}.tile.retrying:after{content:"↻  Generating new variant…";position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,11,15,.48);color:#fff;font-size:9px;font-weight:700}.retry-label{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,11,15,.48);color:#fff;font-size:9px;font-weight:700;z-index:3}.retry{position:absolute;left:6px;bottom:6px;height:24px;padding:0 8px;border:1px solid #3b4249;border-radius:7px;background:#11151aee;color:#f4f7fb;font-size:8px;z-index:2}.tile:hover .retry{display:block}.retry{display:block}
 .check{display:none;position:absolute;right:7px;top:7px;width:21px;height:21px;border-radius:7px;background:var(--accent);place-items:center;color:#fff;font-size:11px}
 .tile.selected .check{display:grid}
@@ -629,6 +730,7 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <button class="active" data-page="generate"><span class="ico">✦</span>Generate</button>
 <button data-page="dataset"><span class="ico">◇</span>Dataset</button>
 <button data-page="lora"><span class="ico">◉</span>LoRA</button>
+<button data-page="lora-test"><span class="ico">◇</span>Test LoRA</button>
 <button data-page="settings"><span class="ico">⚙</span>Settings</button>
 </nav>
 <div class="sidebar-bottom"><button class="comfy" id="comfyBtn">▶<br>ComfyUI</button></div>
@@ -707,6 +809,38 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 </section><div class="footer">Character Lab · local LoRA trainer</div>
 </div>
 
+
+<div id="page-lora-test" class="lab-page" style="display:none">
+<header class="topbar"><div class="brand"><h1>Test LoRA</h1><p>Character LoRA · NoobAI-XL · quick generation test</p></div><div class="badges"><span class="badge">LORA TEST</span><span class="badge" id="loraTestStatus">READY</span></div></header>
+<section class="panel">
+<div class="panel-head"><div><h2>Test trained character</h2><p>Проверяем обученную LoRA на той же базе NoobAI-XL-v1.1.</p></div><div class="steps"><span class="step active">01 LORA</span><span class="step active">02 PROMPT</span><span class="step active">03 RESULT</span></div></div>
+<div class="namebar"><label>Character</label><input id="testCharacter" value="Character_01"><button class="clear" id="refreshLoras" style="height:34px">↻ Refresh LoRAs</button></div>
+<div class="workspace">
+<div class="card">
+<div class="card-head"><b>LoRA configuration</b><span>SDXL</span></div>
+<div class="control"><div class="control-title">Model & LoRA</div>
+<div class="field"><label>Base model</label><input id="testModel" value="NoobAI-XL-v1.1.safetensors" readonly></div>
+<div class="field" style="margin-top:8px"><label>LoRA</label><select id="testLora"><option>Loading…</option></select></div>
+</div>
+<div class="control"><div class="control-title">LoRA strength</div><div class="range"><input id="testStrength" type="range" min="0" max="1.5" step="0.05" value="0.80"><output id="testStrengthOut">0.80</output></div><p style="margin:7px 0 0;color:#686f78;font-size:9px">Начни с 0.80. Для сравнения можно сделать 0.60 / 0.80 / 1.00.</p></div>
+<div class="control"><div class="control-title">Output</div><div class="grid2">
+<div class="field"><label>Variants</label><select id="testCount"><option selected>1</option><option>2</option><option>4</option></select></div>
+<div class="field"><label>Width</label><select id="testWidth"><option selected>512</option><option>768</option><option>1024</option></select></div>
+<div class="field"><label>Height</label><select id="testHeight"><option selected>768</option><option>1024</option><option>1216</option></select></div>
+<div class="field"><label>Steps</label><select id="testSteps"><option>24</option><option selected>28</option><option>32</option></select></div>
+<div class="field"><label>CFG</label><input id="testCfg" value="6.0"></div>
+<div class="field"><label>Seed</label><input id="testSeed" value="0"></div>
+</div></div>
+</div>
+<div class="controls">
+<div class="control"><div class="control-title">Prompt</div><textarea id="testPrompt" style="min-height:150px">photo of an adult woman, photorealistic, natural human skin texture, realistic facial features, full body portrait, standing naturally, looking at camera, casual clothes, soft natural daylight, realistic photography</textarea></div>
+<div class="control"><div class="control-title">Negative prompt</div><textarea id="testNegative" style="min-height:105px">anime, cartoon, illustration, drawing, deformed face, bad anatomy, extra limbs, duplicate person, blurry, low quality, text, watermark</textarea></div>
+<div class="actions"><button class="primary" id="testLoraBtn">✨ Generate LoRA test</button><div class="status" id="testMessage">Готово к тесту</div></div>
+</div></div>
+<div class="results" style="margin-top:10px"><div class="results-head"><b>LoRA test results</b><span id="testResultCount">0 images</span></div><div class="gallery" id="testGallery"><div class="empty">Здесь появятся тестовые изображения</div></div></div>
+</section><div class="footer">Character Lab · LoRA test workspace</div>
+</div>
+
 <div id="page-settings" class="lab-page" style="display:none">
 <header class="topbar"><div class="brand"><h1>Settings</h1><p>Local paths · runtime · trainer diagnostics</p></div></header>
 <section class="panel"><div class="card"><div class="card-head"><b>Character Lab paths</b><span>LOCAL</span></div><div class="control"><div class="field"><label>AI root</label><input value="C:\\AI" readonly></div><div class="field" style="margin-top:8px"><label>Characters</label><input value="Character Lab folder\characters" readonly></div><div class="field" style="margin-top:8px"><label>sd-scripts</label><input value="C:\\AI\\sd-scripts" readonly></div><div class="field" style="margin-top:8px"><label>Trainer</label><input value="C:\\AI\\sd-scripts\\sdxl_train_network.py" readonly></div></div><div class="control"><div class="control-title">Trainer status</div><div class="status" id="settingsTrainer">Checking…</div></div></div></section><div class="footer">Character Lab · settings</div>
@@ -716,12 +850,13 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <div class="toast" id="toast"></div>
 <script>
 
-const labPages=["generate","dataset","lora","settings"];
+const labPages=["generate","dataset","lora","lora-test","settings"];
 function showLabPage(page){
   labPages.forEach(p=>{const el=document.getElementById("page-"+p);if(el)el.style.display=(p===page?"block":"none")});
   document.querySelectorAll(".nav button[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));
   if(page==="dataset")loadDataset();
   if(page==="lora"){checkTrainer();checkTrainDataset();pollTrain()}
+  if(page==="lora-test"){loadTestLoras();loadTestResults()}
   if(page==="settings")checkTrainer();
 }
 document.querySelectorAll(".nav button[data-page]").forEach(b=>b.onclick=()=>showLabPage(b.dataset.page));
@@ -764,6 +899,84 @@ document.getElementById("saveCaption").onclick=async()=>{
     const r=await fetch("/api/caption",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:url,caption:document.getElementById("captionText").value})});
     const d=await r.json();if(!r.ok)throw Error(d.error||"Caption error");toast("Caption сохранён");loadDataset();
   }catch(e){toast(e.message)}
+};
+
+
+async function loadTestLoras(){
+  const name=(document.getElementById("testCharacter").value||"Character_01").trim();
+  const select=document.getElementById("testLora");
+  try{
+    const d=await (await fetch("/api/lora/list?name="+encodeURIComponent(name))).json();
+    select.innerHTML="";
+    if(!d.items.length){
+      select.innerHTML='<option value="">LoRA не найдена</option>';
+      document.getElementById("loraTestStatus").textContent="NO LORA";
+      return;
+    }
+    d.items.forEach((x,i)=>{
+      const o=document.createElement("option");
+      o.value=x.path;
+      o.textContent=x.name+(i===0?" · latest":"");
+      select.appendChild(o);
+    });
+    document.getElementById("loraTestStatus").textContent=d.items[0].name;
+  }catch(e){
+    select.innerHTML='<option value="">Ошибка загрузки</option>';
+    document.getElementById("loraTestStatus").textContent="ERROR";
+  }
+}
+async function loadTestResults(){
+  const name=(document.getElementById("testCharacter").value||"Character_01").trim();
+  try{
+    const d=await (await fetch("/api/lora/results?name="+encodeURIComponent(name))).json();
+    const g=document.getElementById("testGallery");g.innerHTML="";
+    document.getElementById("testResultCount").textContent=d.items.length+" images";
+    if(!d.items.length){g.innerHTML='<div class="empty">Здесь появятся тестовые изображения</div>';return;}
+    d.items.forEach(x=>{
+      const tile=document.createElement("div");
+      tile.className="tile";
+      tile.innerHTML='<img src="'+x.url+'?v='+encodeURIComponent(x.name)+'" loading="lazy">';
+      g.appendChild(tile);
+    });
+  }catch(e){document.getElementById("testMessage").textContent="Не удалось загрузить результаты"}
+}
+document.getElementById("refreshLoras").onclick=()=>{loadTestLoras();loadTestResults()};
+document.getElementById("testCharacter").onchange=()=>{loadTestLoras();loadTestResults()};
+document.getElementById("testStrength").oninput=()=>document.getElementById("testStrengthOut").value=parseFloat(document.getElementById("testStrength").value).toFixed(2);
+document.getElementById("testLoraBtn").onclick=async()=>{
+  const btn=document.getElementById("testLoraBtn");
+  const msg=document.getElementById("testMessage");
+  const lora=document.getElementById("testLora").value;
+  if(!lora)return toast("Сначала выбери LoRA.");
+  btn.disabled=true;btn.textContent="◌ Generating…";msg.textContent="Загрузка LoRA и генерация…";document.getElementById("loraTestStatus").textContent="RUNNING";
+  try{
+    const payload={
+      name:document.getElementById("testCharacter").value,
+      lora_path:lora,
+      prompt:document.getElementById("testPrompt").value,
+      negative:document.getElementById("testNegative").value,
+      width:document.getElementById("testWidth").value,
+      height:document.getElementById("testHeight").value,
+      strength:document.getElementById("testStrength").value,
+      steps:document.getElementById("testSteps").value,
+      cfg:document.getElementById("testCfg").value,
+      count:document.getElementById("testCount").value,
+      seed:document.getElementById("testSeed").value
+    };
+    const r=await fetch("/api/lora/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||"LoRA test failed");
+    msg.textContent="Готово · "+d.items.length+" image(s)";
+    document.getElementById("loraTestStatus").textContent="READY";
+    await loadTestResults();
+  }catch(e){
+    msg.textContent=e.message;
+    document.getElementById("loraTestStatus").textContent="ERROR";
+    toast(e.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent="✨ Generate LoRA test";
+  }
 };
 
 async function checkTrainer(){
@@ -943,6 +1156,15 @@ class Handler(BaseHTTPRequestHandler):
             captions = sum(1 for x in approved if image_caption(x))
             missing = len(approved) - captions
             return self.reply(200, json.dumps({"items":items,"summary":{"approved":len(approved),"generated":len(data["generated"]),"source":len(data["source"]),"captions":captions,"missing":missing}}, ensure_ascii=False))
+
+        if path == "/api/lora/list":
+            q = dict(x.split("=",1) if "=" in x else (x,"") for x in urlparse(self.path).query.split("&") if x)
+            name = safe_name(q.get("name","Character_01"))
+            items = [{"name":x.name,"path":str(x)} for x in lora_output_files(name)]
+            return self.reply(200, json.dumps({"items":items}, ensure_ascii=False))
+        if path == "/api/lora/results":
+            q = dict(x.split("=",1) if "=" in x else (x,"") for x in urlparse(self.path).query.split("&") if x)
+            return self.reply(200, json.dumps({"items":list_lora_tests(q.get("name","Character_01"))}, ensure_ascii=False))
         if path == "/api/trainer/status":
             return self.reply(200, json.dumps(trainer_status(), ensure_ascii=False))
         if path == "/api/train/status":
@@ -972,6 +1194,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_launch()
         if path == "/api/caption":
             return self.handle_caption()
+
+        if path == "/api/lora/test":
+            try:
+                n=int(self.headers.get("Content-Length","0"))
+                payload=json.loads(self.rfile.read(n) or "{}")
+                result=run_lora_test(payload)
+                return self.reply(200,json.dumps(result,ensure_ascii=False))
+            except Exception as e:
+                return self.reply(400,json.dumps({"error":str(e)},ensure_ascii=False))
         if path == "/api/train/start":
             return self.handle_train_start()
         if path == "/api/train/stop":
