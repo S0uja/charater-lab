@@ -471,7 +471,7 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <div class="field"><label>Extra prompt</label><input id="extra" placeholder="natural expression, soft light"></div>
 </div></div>
 <div class="control"><div class="control-title">Output</div><div class="grid2">
-<div class="field"><label>Variants</label><select id="count"><option>4</option><option>8</option><option>12</option><option>16</option><option selected>20</option></select></div>
+<div class="field"><label>Variants</label><select id="count"><option selected>1</option><option>4</option><option>8</option><option>12</option><option>16</option><option>20</option></select></div>
 <div class="field"><label>Width</label><select id="width"><option selected>512</option><option>640</option><option>768</option></select></div>
 <div class="field"><label>Height</label><select id="height"><option selected>768</option><option>896</option><option>1024</option></select></div>
 </div></div>
