@@ -1,0 +1,104 @@
+# ==========================================
+# Character Lab - Git Ignore
+# ==========================================
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ==========================================
+# AI MODELS
+# ==========================================
+
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+*.ggml
+
+# ==========================================
+# GENERATED IMAGES / VIDEO
+# ==========================================
+
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# ==========================================
+# Character generated data
+# ==========================================
+
+characters/*/generated_dataset/
+characters/*/samples/
+characters/*/output/
+
+# Temporary training files
+characters/*/cache/
+characters/*/temp/
+characters/*/tmp/
+
+# Training logs
+characters/*/logs/
+
+# ==========================================
+# Backups
+# ==========================================
+
+*_backup/
+*.bak
+*.old
+*.orig
+
+# ==========================================
+# Runtime / temporary
+# ==========================================
+
+tmp/
+temp/
+cache/
+logs/
+
+*.log
+
+# ==========================================
+# IDE
+# ==========================================
+
+.vscode/
+.idea/
+
+# ==========================================
+# OS
+# ==========================================
+
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ==========================================
+# Secrets
+# ==========================================
+
+.env
+.env.*
+!.env.example
+
+# API keys / tokens
+*secret*
+*credentials*

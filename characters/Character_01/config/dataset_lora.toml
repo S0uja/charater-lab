@@ -1,0 +1,16 @@
+[general]
+shuffle_caption = false
+caption_extension = ".txt"
+keep_tokens = 1
+
+[[datasets]]
+resolution = 1024
+enable_bucket = true
+bucket_reso_steps = 64
+min_bucket_reso = 512
+max_bucket_reso = 1536
+
+  [[datasets.subsets]]
+  image_dir = "C:/AI/Character_Lab_V6/characters/Character_01/approved"
+  num_repeats = 8
+  class_tokens = ""
