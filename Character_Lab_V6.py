@@ -915,9 +915,42 @@ def find_free_port(start=7860, end=7880):
                 pass
     raise OSError(f"Нет свободного порта {start}-{end}.")
 
+
+def detect_lan_ip():
+    """Return the PC's LAN IPv4 address for access from a phone/tablet."""
+    candidates = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("192.0.2.1", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            candidates.append(ip)
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127."):
+                candidates.append(ip)
+    except OSError:
+        pass
+    for ip in candidates:
+        if ip.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+                          "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+                          "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")):
+            return ip
+    return candidates[0] if candidates else "YOUR-PC-IP"
+
+
 if __name__ == "__main__":
+    # Listen on all local interfaces so a phone on the same LAN can connect.
     port = find_free_port()
-    print(f"Character Lab: http://127.0.0.1:{port}")
-    server = ThreadingHTTPServer(("127.0.0.1",port), Handler)
+    lan_ip = detect_lan_ip()
+    print(f"Character Lab (PC):    http://127.0.0.1:{port}")
+    print(f"Character Lab (PHONE): http://{lan_ip}:{port}")
+    print(f"Status test:           http://{lan_ip}:{port}/api/status")
+    print("Phone and PC must be on the same Wi-Fi/LAN.")
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     threading.Timer(.7, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
     server.serve_forever()
