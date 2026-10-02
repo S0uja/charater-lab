@@ -168,10 +168,8 @@ NEGATIVE_PROMPT = (
 )
 
 
-def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0, user_prompt=""):
+def make_prompt(user_prompt="", prompt_base=None, variation=0):
     base = prompt_base if prompt_base is not None else PROMPT_BASE
-    # Keep the subject fully inside the vertical frame. User-provided pose/scene/clothing
-    # are appended after the composition requirements so they do not silently replace them.
     composition = [
         "full body",
         "head-to-toe",
@@ -186,19 +184,11 @@ def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0, 
     parts = [*base, *composition]
     if user_prompt:
         parts.append(str(user_prompt).strip())
-    parts.extend([
-        str(clothing or "casual clothes"),
-        str(scene or "studio"),
-        str(pose or "full-body standing pose"),
-    ])
-    if extra:
-        parts.append(str(extra).strip())
-    parts.append("natural candid variation" if variation % 2 else "natural realistic pose")
+    parts.append("natural candid variation" if variation % 2 else "natural realistic variation")
     return ", ".join(x for x in parts if x)
 
 
-def generate(name, source, count, strength, width, height, clothing="casual clothes", scene="studio",
-             pose="portrait", extra="", user_prompt="", progress=None, on_item=None, prompt_base=None, negative_prompt=None):
+def generate(name, source, count, strength, width, height, user_prompt="", progress=None, on_item=None, prompt_base=None, negative_prompt=None):
     if source is None:
         raise RuntimeError("Загрузите исходное фото.")
     if not comfy_online():
@@ -217,7 +207,7 @@ def generate(name, source, count, strength, width, height, clothing="casual clot
     total = max(1, int(count))
 
     for i in range(total):
-        prompt = make_prompt(clothing, scene, pose, extra, base, i, user_prompt=user_prompt)
+        prompt = make_prompt(user_prompt=user_prompt, prompt_base=base, variation=i)
         prompts.append(prompt)
         if progress:
             progress(0.05 + .90 * (i / max(total, 1)), f"Вариант {i + 1} из {total}…")
@@ -479,12 +469,6 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <div class="control prompt-control"><div class="control-title">Prompt</div>
 <div class="field"><label>What should be in the image?</label><textarea id="prompt" style="min-height:92px" placeholder="Например: девушка в чёрном вечернем платье, стоит у окна, мягкий вечерний свет, полный рост"></textarea></div>
 </div>
-<div class="control"><div class="control-title">Appearance</div><div class="grid2">
-<div class="field"><label>Clothing</label><select id="clothing"><option>casual clothes</option><option>evening dress</option><option>leather jacket</option><option>business outfit</option><option>sportswear</option><option>lingerie</option><option>swimwear</option></select></div>
-<div class="field"><label>Scene</label><select id="scene"><option>studio</option><option>bedroom</option><option>city street</option><option>cafe</option><option>office</option><option>beach</option><option>forest</option></select></div>
-<div class="field"><label>Pose / angle</label><select id="pose"><option>portrait</option><option>standing</option><option>sitting</option><option>full body</option><option>three-quarter view</option><option>profile</option></select></div>
-<div class="field"><label>Extra prompt</label><input id="extra" placeholder="natural expression, soft light"></div>
-</div></div>
 <div class="control"><div class="control-title">Output</div><div class="grid2">
 <div class="field"><label>Variants</label><select id="count"><option selected>1</option><option>4</option><option>8</option><option>12</option><option>16</option><option>20</option></select></div>
 <div class="field"><label>Width</label><select id="width"><option selected>512</option><option>640</option><option>768</option></select></div>
@@ -584,7 +568,7 @@ function loadSource(f){if(!f||!f.type.startsWith("image/"))return toast("Выб�
 $("generateBtn").onclick=async()=>{
  if(!sourceFile)return toast("Сначала загрузите исходное фото.");
  selected.clear();generated=[];renderGallery();
- const fd=new FormData();fd.append("image",sourceFile);["name","count","strength","width","height","clothing","scene","pose","extra","prompt"].forEach(k=>fd.append(k,$(k).value));
+ const fd=new FormData();fd.append("image",sourceFile);["name","count","strength","width","height","prompt"].forEach(k=>fd.append(k,$(k).value));
  $("generateBtn").disabled=true;$("status").textContent="Generating characters…";
  try{const r=await fetch("/api/generate",{method:"POST",body:fd}),d=await r.json();if(!r.ok)throw Error(d.error||"Generation error");pollTimer=setInterval(poll,700)}catch(e){toast(e.message);$("generateBtn").disabled=false;$("status").textContent="Ready to generate"}
 };
@@ -647,12 +631,8 @@ def run_generation(params, source_bytes, source_filename):
         total = max(1, int(params.get("count", 4)))
         base = PROMPT_BASE
         negative = NEGATIVE_PROMPT
-        clothing = str(params.get("clothing", "casual clothes"))
-        scene = str(params.get("scene", "studio"))
-        pose = str(params.get("pose", "portrait"))
-        extra = str(params.get("extra", "")).strip()
         user_prompt = str(params.get("prompt", "")).strip()
-        prompts = [make_prompt(clothing, scene, pose, extra, base, i, user_prompt=user_prompt) for i in range(total)]
+        prompts = [make_prompt(user_prompt=user_prompt, prompt_base=base, variation=i) for i in range(total)]
         items = [{"url": None, "prompt": prompts[i], "state": "waiting"} for i in range(total)]
         set_job(state="running", progress=1, message=f"Подготовка {total} вариантов…", files=[], items=items, retrying={}, error=None)
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(source_filename).suffix or ".png") as tmp:
@@ -673,7 +653,7 @@ def run_generation(params, source_bytes, source_filename):
             files, _ = generate(
                 params["name"], tmp_path, total, float(params["strength"]),
                 int(params["width"]), int(params["height"]),
-                clothing=clothing, scene=scene, pose=pose, extra=extra, user_prompt=user_prompt,
+                user_prompt=user_prompt,
                 progress=lambda value, message: set_job(progress=round(float(value)*100,1), message=message),
                 on_item=on_item, prompt_base=base, negative_prompt=negative
             )
@@ -794,7 +774,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(409, json.dumps({"error":"Generation already running"}))
 
         params = {k: fields.get(k, "") for k in
-                  ["name","count","strength","width","height","clothing","scene","pose","extra"]}
+                  ["name","count","strength","width","height","prompt"]}
         set_job(id=str(uuid.uuid4()), state="queued", progress=0,
                 message="Queued…", files=[], error=None)
         threading.Thread(
