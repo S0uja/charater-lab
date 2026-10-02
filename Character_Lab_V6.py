@@ -168,7 +168,7 @@ NEGATIVE_PROMPT = (
 )
 
 
-def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0):
+def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0, user_prompt=""):
     base = prompt_base if prompt_base is not None else PROMPT_BASE
     # Keep the subject fully inside the vertical frame. User-provided pose/scene/clothing
     # are appended after the composition requirements so they do not silently replace them.
@@ -183,7 +183,14 @@ def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0):
         "vertical full-body framing",
         "small breathing room above the head and below the feet",
     ]
-    parts = [*base, *composition, str(clothing or "casual clothes"), str(scene or "studio"), str(pose or "full-body standing pose")]
+    parts = [*base, *composition]
+    if user_prompt:
+        parts.append(str(user_prompt).strip())
+    parts.extend([
+        str(clothing or "casual clothes"),
+        str(scene or "studio"),
+        str(pose or "full-body standing pose"),
+    ])
     if extra:
         parts.append(str(extra).strip())
     parts.append("natural candid variation" if variation % 2 else "natural realistic pose")
@@ -191,7 +198,7 @@ def make_prompt(clothing, scene, pose, extra="", prompt_base=None, variation=0):
 
 
 def generate(name, source, count, strength, width, height, clothing="casual clothes", scene="studio",
-             pose="portrait", extra="", progress=None, on_item=None, prompt_base=None, negative_prompt=None):
+             pose="portrait", extra="", user_prompt="", progress=None, on_item=None, prompt_base=None, negative_prompt=None):
     if source is None:
         raise RuntimeError("Загрузите исходное фото.")
     if not comfy_online():
@@ -210,7 +217,7 @@ def generate(name, source, count, strength, width, height, clothing="casual clot
     total = max(1, int(count))
 
     for i in range(total):
-        prompt = make_prompt(clothing, scene, pose, extra, base, i)
+        prompt = make_prompt(clothing, scene, pose, extra, base, i, user_prompt=user_prompt)
         prompts.append(prompt)
         if progress:
             progress(0.05 + .90 * (i / max(total, 1)), f"Вариант {i + 1} из {total}…")
@@ -426,7 +433,12 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 .footer{text-align:center;color:#404d60;font-size:8px;padding:10px}
 .reference-fit{width:auto!important;height:auto!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important}
 @media(max-width:1050px){.workspace{grid-template-columns:1fr}.drop{height:420px}.gallery{grid-template-columns:repeat(4,1fr)}}
-@media(max-width:720px){.app{width:calc(100vw - 14px)}.layout{grid-template-columns:1fr}.sidebar{position:static;height:auto;min-height:0;flex-direction:row}.logo{margin:0 8px 0 0}.nav{flex-direction:row}.sidebar-bottom{margin:0 0 0 auto}.stats{grid-template-columns:1fr 1fr}.actions{grid-template-columns:1fr}.gallery{grid-template-columns:repeat(3,1fr)}.steps{display:none}}
+@media(max-width:720px){
+.app{width:calc(100vw - 14px)}.layout{grid-template-columns:1fr}.sidebar{position:static;height:auto;min-height:0;flex-direction:row}.logo{margin:0 8px 0 0}.nav{flex-direction:row}.sidebar-bottom{margin:0 0 0 auto}.stats{grid-template-columns:1fr 1fr}.actions{grid-template-columns:1fr}.gallery{grid-template-columns:repeat(3,1fr)}.steps{display:none}
+.gallery.single-mobile{grid-template-columns:1fr}
+.gallery.single-mobile .tile{grid-column:1 / -1;width:100%;aspect-ratio:auto;height:auto}
+.gallery.single-mobile .tile img{width:100%;height:auto;max-height:none;object-fit:contain}
+}
 .lab-page{min-width:0}
 .lab-page .card{min-height:0}
 .page-title{display:flex;justify-content:space-between;align-items:center;margin:8px 0 11px;padding:0 3px}.page-title h2{margin:0;font-size:16px;letter-spacing:-.03em}.page-title p{margin:4px 0 0;color:#707780;font-size:9px}.page-title-badges{display:flex;gap:5px}.page-title-badges span{padding:6px 8px;border:1px solid #292e35;border-radius:7px;font-size:8px;color:#707780}.page-title-badges span:first-child{background:#1b1e21;color:#eef2f6}
@@ -464,6 +476,9 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 </div>
 <div class="controls">
 <div class="control"><div class="control-title">Reference strength</div><div class="range"><input id="strength" type="range" min=".55" max="1.00" step=".01" value=".68"><output id="strengthOut">0.68</output></div></div>
+<div class="control prompt-control"><div class="control-title">Prompt</div>
+<div class="field"><label>What should be in the image?</label><textarea id="prompt" style="min-height:92px" placeholder="Например: девушка в чёрном вечернем платье, стоит у окна, мягкий вечерний свет, полный рост"></textarea></div>
+</div>
 <div class="control"><div class="control-title">Appearance</div><div class="grid2">
 <div class="field"><label>Clothing</label><select id="clothing"><option>casual clothes</option><option>evening dress</option><option>leather jacket</option><option>business outfit</option><option>sportswear</option><option>lingerie</option><option>swimwear</option></select></div>
 <div class="field"><label>Scene</label><select id="scene"><option>studio</option><option>bedroom</option><option>city street</option><option>cafe</option><option>office</option><option>beach</option><option>forest</option></select></div>
@@ -480,7 +495,7 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <div class="results">
 <div class="results-head"><b>Generated characters</b><span id="selectedText">0 selected</span></div>
 <div class="gallery" id="gallery"><div class="empty">Generated variants will appear here</div></div>
-<div class="result-actions"><button class="approve" id="saveDatasetBtn">✓ Save selected dataset</button><button class="clear" id="saveReadyBtn">✓ Save all ready</button><button class="clear" id="approveBtn">+ Add selected to Approved</button><button class="clear" id="clearBtn">Clear selection</button></div>
+<div class="result-actions"><button class="approve" id="approveBtn">+ Add selected to Approved</button><button class="clear" id="clearBtn">Clear selection</button></div>
 </div>
 </section>
 <div class="footer">Character Lab · local private workspace</div>
@@ -493,7 +508,7 @@ input[type=range]{height:4px;padding:0;border:0;accent-color:var(--accent)}
 <div class="stats"><div class="stat"><label>Approved</label><strong id="dsApproved">0</strong><small>approved images</small></div><div class="stat"><label>Generated</label><strong id="dsGenerated">0</strong><small>variants</small></div><div class="stat"><label>Source</label><strong id="dsSource">0</strong><small>references</small></div><div class="stat"><label>Captions</label><strong id="dsCaption">0</strong><small>ready captions</small></div></div>
 <div class="control"><div class="control-title">Dataset view</div><div class="grid2"><div class="field"><label>Folder</label><select id="datasetScope"><option value="approved">Approved</option><option value="generated">Generated dataset</option><option value="source">Source</option><option value="all">All images</option></select></div><div class="field"><label>Status</label><div class="status" id="datasetStatus">Ready</div></div></div></div>
 <div class="results"><div class="results-head"><b id="datasetTitle">Approved</b><span id="datasetCount">0 images</span></div><div class="gallery" id="datasetGallery"><div class="empty">Dataset is empty</div></div></div>
-<div class="control" style="margin-top:10px"><div class="control-title">Caption editor</div><div class="field"><label>Selected image</label><input id="captionFile" readonly placeholder="Click an image"></div><div class="field" style="margin-top:8px"><label>Caption</label><textarea id="captionText" style="min-height:90px" placeholder="Write a caption for the selected image"></textarea></div><div class="result-actions"><button class="approve" id="saveCaption">Save caption</button><button class="clear" id="refreshDataset">Refresh</button></div></div>
+<div class="control" style="margin-top:10px"><div class="control-title">Caption editor</div><div class="field"><label>Selected image</label><input id="captionFile" readonly placeholder="Click an image"></div><div class="field" style="margin-top:8px"><label>Caption</label><textarea id="captionText" style="min-height:90px" placeholder="Write a caption for the selected image"></textarea></div><div class="result-actions"><button class="clear" id="refreshDataset">Refresh</button></div></div>
 </section><div class="footer">Character Lab · dataset manager</div>
 </div>
 
@@ -546,13 +561,17 @@ async function loadDataset(){
 document.getElementById("datasetScope").onchange=loadDataset;
 document.getElementById("datasetCharacter").onchange=loadDataset;
 document.getElementById("refreshDataset").onclick=loadDataset;
-document.getElementById("saveCaption").onclick=async()=>{
-  const url=document.getElementById("captionText").dataset.path;
-  if(!url)return toast("Выбери изображение.");
-  try{
-    const r=await fetch("/api/caption",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:url,caption:document.getElementById("captionText").value})});
-    const d=await r.json();if(!r.ok)throw Error(d.error||"Caption error");toast("Caption сохранён");loadDataset();
-  }catch(e){toast(e.message)}
+let captionSaveTimer=null;
+document.getElementById("captionText").oninput=()=>{
+  clearTimeout(captionSaveTimer);
+  captionSaveTimer=setTimeout(async()=>{
+    const url=document.getElementById("captionText").dataset.path;
+    if(!url)return;
+    try{
+      const r=await fetch("/api/caption",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image_url:url,caption:document.getElementById("captionText").value})});
+      if(r.ok) document.getElementById("datasetStatus").textContent="Caption saved automatically";
+    }catch(e){}
+  },700);
 };
 
 let sourceFile=null,generated=[],selected=new Set(),pollTimer=null;
@@ -565,13 +584,14 @@ function loadSource(f){if(!f||!f.type.startsWith("image/"))return toast("Выб�
 $("generateBtn").onclick=async()=>{
  if(!sourceFile)return toast("Сначала загрузите исходное фото.");
  selected.clear();generated=[];renderGallery();
- const fd=new FormData();fd.append("image",sourceFile);["name","count","strength","width","height","clothing","scene","pose","extra"].forEach(k=>fd.append(k,$(k).value));
+ const fd=new FormData();fd.append("image",sourceFile);["name","count","strength","width","height","clothing","scene","pose","extra","prompt"].forEach(k=>fd.append(k,$(k).value));
  $("generateBtn").disabled=true;$("status").textContent="Generating characters…";
  try{const r=await fetch("/api/generate",{method:"POST",body:fd}),d=await r.json();if(!r.ok)throw Error(d.error||"Generation error");pollTimer=setInterval(poll,700)}catch(e){toast(e.message);$("generateBtn").disabled=false;$("status").textContent="Ready to generate"}
 };
 async function poll(){try{const d=await(await fetch("/api/job")).json();$("status").textContent=d.message+" · "+d.progress+"%";generated=d.items||[];renderGallery();if(d.state==="done" && !(d.retrying&&Object.keys(d.retrying).length)){clearInterval(pollTimer);pollTimer=null;$("generateBtn").disabled=false}if(d.state==="error"){clearInterval(pollTimer);pollTimer=null;$("generateBtn").disabled=false;$("status").textContent="Generation failed";toast(d.error||"Generation failed")}}catch(e){}}
 function renderGallery(){
  const g=$("gallery"); g.innerHTML="";
+ g.classList.toggle("single-mobile", generated.length === 1);
  if(!generated.length){g.innerHTML='<div class="empty">Generated characters will appear here</div>';return}
  generated.forEach((item,i)=>{
    const tile=document.createElement("div");
@@ -597,8 +617,6 @@ async function retryVariant(i){
    if(!pollTimer)pollTimer=setInterval(poll,500);
  }catch(e){item.state="ready";renderGallery();toast(e.message)}
 }
-$("saveDatasetBtn").onclick=async()=>{if(!selected.size)return toast("Выберите изображения для Dataset.");try{const r=await fetch("/api/save-dataset",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("name").value,indices:[...selected]})});const d=await r.json();if(!r.ok)throw Error(d.error||"Save failed");toast(d.message);selected.clear();updateSelection()}catch(e){toast(e.message)}}
-$("saveReadyBtn").onclick=async()=>{const ready=generated.map((x,i)=>x.state==="ready"?i:-1).filter(i=>i>=0);if(!ready.length)return toast("Пока нет готовых изображений.");try{const r=await fetch("/api/save-dataset",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("name").value,indices:ready})});const d=await r.json();if(!r.ok)throw Error(d.error||"Save failed");toast(d.message);selected.clear();renderGallery()}catch(e){toast(e.message)}}
 $("approveBtn").onclick=async()=>{if(!selected.size)return toast("Выберите изображения.");try{const r=await fetch("/api/approve",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("name").value,indices:[...selected]})});const d=await r.json();if(!r.ok)throw Error(d.error);toast("Добавлено в Approved: "+d.saved);selected.clear();renderGallery()}catch(e){toast(e.message)}}
 $("clearBtn").onclick=()=>{selected.clear();renderGallery()}
 
@@ -633,7 +651,8 @@ def run_generation(params, source_bytes, source_filename):
         scene = str(params.get("scene", "studio"))
         pose = str(params.get("pose", "portrait"))
         extra = str(params.get("extra", "")).strip()
-        prompts = [make_prompt(clothing, scene, pose, extra, base, i) for i in range(total)]
+        user_prompt = str(params.get("prompt", "")).strip()
+        prompts = [make_prompt(clothing, scene, pose, extra, base, i, user_prompt=user_prompt) for i in range(total)]
         items = [{"url": None, "prompt": prompts[i], "state": "waiting"} for i in range(total)]
         set_job(state="running", progress=1, message=f"Подготовка {total} вариантов…", files=[], items=items, retrying={}, error=None)
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(source_filename).suffix or ".png") as tmp:
@@ -654,7 +673,7 @@ def run_generation(params, source_bytes, source_filename):
             files, _ = generate(
                 params["name"], tmp_path, total, float(params["strength"]),
                 int(params["width"]), int(params["height"]),
-                clothing=clothing, scene=scene, pose=pose, extra=extra,
+                clothing=clothing, scene=scene, pose=pose, extra=extra, user_prompt=user_prompt,
                 progress=lambda value, message: set_job(progress=round(float(value)*100,1), message=message),
                 on_item=on_item, prompt_base=base, negative_prompt=negative
             )
