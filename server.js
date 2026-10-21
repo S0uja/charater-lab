@@ -13,6 +13,7 @@ const chatModel = process.env.OLLAMA_MODEL || 'hf.co/mradermacher/Katarau-9B-ru-
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const jobs = new Map();
 const JOB_TTL_MS = 30 * 60 * 1000;
+const MAX_TRACKED_IMAGE_JOBS = 8;
 const PUBLIC_PAGES = new Set(['index.html', 'characters.html', 'room.html', 'visual-novel.html']);
 const PUBLIC_ASSET = /^assets\/studio\/[a-z0-9_-]+\.(?:jpe?g|png|webp)$/i;
 
@@ -30,6 +31,12 @@ async function readJson(req, maxBytes = 3 * 1024 * 1024) {
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function pruneExpiredImageJobs(now = Date.now()) {
+  for (const [jobId, job] of jobs) {
+    if (now - job.createdAt > JOB_TTL_MS) jobs.delete(jobId);
+  }
 }
 
 async function comfyFetch(url, options = {}) {
@@ -523,6 +530,17 @@ async function handleImage(req, res) {
   const requestedLongHair = /\b(?:long|waist[- ]length|shoulder[- ]length)\s+(?:blonde|blond|fair|light[- ](?:blonde|brown))\s+hair\b|\b(?:long|waist[- ]length|shoulder[- ]length)\s+hair\b|длинн\w*\s+(?:светл\w*|бел\w*|рус\w*)?\s*волос/iu.test(`${visual} ${String(body.player_action || '')}`);
   const contactWasExplicit = /\b(?:hug|embrace|kiss|touch|hold hands|grab|pull|tug|undress|change clothes|adjust(?:ing)? (?:her|his|their) clothes)\b|обним|поцел|дотрон|трогать|схват|потянуть|стянуть|раздеть|переод|поправ(?:ить|ляет) одежд|держ(?:ать|ит) за руку/iu.test(sceneFacts);
   if (!visual) return json(res, 400, { error: 'Не удалось определить сцену для фото.' });
+
+  // Avoid flooding the GPU queue with repeated clicks or forgotten polling sessions.
+  pruneExpiredImageJobs();
+  if (jobs.size >= MAX_TRACKED_IMAGE_JOBS) {
+    res.setHeader('retry-after', '10');
+    return json(res, 429, {
+      error: 'Слишком много незавершённых генераций изображений. Дождись завершения одной из задач и попробуй снова.',
+      limit: MAX_TRACKED_IMAGE_JOBS,
+    });
+  }
+
   try {
     // Ollama and SDXL share the same 12 GB GPU; release the chat model before ComfyUI runs.
     try {
@@ -552,11 +570,6 @@ async function handleImage(req, res) {
       return json(res, 502, { error: typeof details === 'string' ? details : JSON.stringify(details) });
     }
     jobs.set(id, { promptId: queued.prompt_id, createdAt: Date.now() });
-    if (jobs.size > 200) {
-      for (const [jobKey, jobValue] of jobs) {
-        if (Date.now() - jobValue.createdAt > JOB_TTL_MS || jobs.size > 180) jobs.delete(jobKey);
-      }
-    }
     return json(res, 202, { jobId: id });
   } catch (error) { return json(res, 502, { error: error.message || 'Не удалось поставить генерацию изображения в очередь.' }); }
 }
