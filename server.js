@@ -586,7 +586,7 @@ async function handleChat(req, res) {
       ];
       try { parsed = await requestRpCompletion(correctionMessages); } catch {}
       if (describesOfflineInteraction(parsed.reply)) parsed.reply = 'Жаль, что я не могу угостить тебя по-настоящему. Могу хотя бы отправить тебе виртуальную чашку чая ☕ Рада, что ты написал.';
-      if (repeatsRecentReply(parsed.reply, recentReplies)) parsed.reply = 'Ой, кажется, я повторилась. Извини 🙂 Расскажи, как у тебя проходит день?';
+      if (repeatsRecentReply(parsed.reply, recentReplies)) parsed.reply = 'Я хочу ответить тебе по существу, а не повторяться. Уточни, пожалуйста, что для тебя сейчас важнее всего?';
       if (usesWrongPersonaName(parsed.reply, character.name || 'Персонаж')) parsed.reply = parsed.reply.replace(/(?:меня\s+зовут|я\s*[—-])\s*[\p{L}\p{N}-]+/iu, `Я — ${String(character.name || 'персонаж')}.`);
     }
     return json(res, 200, {
