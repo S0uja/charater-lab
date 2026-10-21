@@ -439,6 +439,7 @@ test('reply repetition guard detects duplicates but allows distinct replies', ()
   const previous = ['Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день'];
   assert.equal(repeatsRecentReply('Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день', previous), true);
   assert.equal(repeatsRecentReply('Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день!', previous), true);
+  assert.equal(repeatsRecentReply('Я рада тебя видеть, а ещё хочу обсудить новую книгу, которую ты начал читать вчера', previous), false);
   assert.equal(repeatsRecentReply('Интересно, что ты думаешь об этой новой идее и почему она тебе нравится', previous), false);
   assert.equal(repeatsRecentReply('Привет', previous), false);
   assert.equal(repeatsRecentReply('Я хочу ответить тебе по существу, а не повторяться. Уточни, пожалуйста, что для тебя сейчас важнее всего?', previous), false);
