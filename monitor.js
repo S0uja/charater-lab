@@ -37,7 +37,7 @@ function probe(url) {
 }
 
 function clearScreen() {
-  if (process.stdout.isTTY) process.stdout.write('\\x1b[2J\\x1b[H');
+  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[H');
 }
 
 function draw() {
