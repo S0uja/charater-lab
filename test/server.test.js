@@ -421,3 +421,14 @@ test('explicit memory extraction keeps user wording and ignores ordinary message
   assert.equal(extractExplicitMemoryFact('Запомни "мой любимый цвет — синий".'), 'мой любимый цвет — синий');
   assert.equal(extractExplicitMemoryFact('Запомни «я обожаю зелёный чай»!'), 'я обожаю зелёный чай');
 });
+
+test('room persists and restores profile, state, and messages in IndexedDB', () => {
+  const fs = require('node:fs');
+  const html = fs.readFileSync(path.join(ROOT, 'room.html'), 'utf8');
+  assert.match(html, /async function persist\(\)\{await put\(messagesKey\(\),messages\);await put\(stateKey\(\),state\);await put\(profileKey\(\),profile\)\}/u);
+  assert.match(html, /state=await get\(`rp:state:\$\{charId\(\)\}`\)/u);
+  assert.match(html, /messages=await get\(`rp:messages:\$\{charId\(\)\}`\)/u);
+  assert.match(html, /const savedProfile=active&&await get\(`rp:profile:\$\{active\.id\|\|active\.name\}`\)/u);
+  assert.match(html, /await renderHistory\(\)/u);
+  assert.match(html, /if\(item\.kind==='image'\)\{const blob=await get\(item\.imageKey\)/u);
+});
