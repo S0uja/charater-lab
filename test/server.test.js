@@ -216,7 +216,7 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   assert.equal(merged.filter(item => item.text.toLocaleLowerCase('ru-RU').includes('люблю кофе')).length, 1);
   assert.ok(!merged.some(item => item.text.includes('работаю из дома')));
   assert.equal(classifyMemoryFact('Предпочитаю короткие ответы').kind, 'preference');
-  assert.match(memoryTextForPrompt(merged, now), /\\[preference\\]/);
+  assert.match(memoryTextForPrompt(merged, now), /\[preference\]/);
   assert.match(memoryTextForPrompt(merged, now), /кот Барсик/);
 });
 test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
