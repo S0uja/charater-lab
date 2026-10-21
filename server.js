@@ -586,10 +586,14 @@ async function handleImageStatus(jobId, res) {
         jobs.delete(jobId);
         return json(res, 200, { status: 'done', image: { filename: image.filename, subfolder: image.subfolder || '', type: image.type || 'output' } });
       }
-      if (status.completed) return json(res, 200, { status: 'error', error: 'ComfyUI завершил задачу, но не сохранил изображение.' });
+      if (status.completed) {
+        jobs.delete(jobId);
+        return json(res, 200, { status: 'error', error: 'ComfyUI завершил задачу, но не сохранил изображение.' });
+      }
     }
     const queueResponse = await comfyFetch('/queue', { timeout: 5000 });
-    const queue = queueResponse.ok ? await queueResponse.json() : {};
+    if (!queueResponse.ok) return json(res, 502, { error: 'ComfyUI не смог проверить очередь генерации. Повтори проверку позже.' });
+    const queue = await queueResponse.json();
     const contains = (items) => (items || []).some((item) => Array.isArray(item) ? item[1] === promptId : item.prompt_id === promptId);
     if (contains(queue.queue_running)) return json(res, 200, { status: 'running' });
     if (contains(queue.queue_pending)) return json(res, 200, { status: 'queued' });
