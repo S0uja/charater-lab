@@ -377,4 +377,6 @@ test('explicit memory extraction keeps user wording and ignores ordinary message
   assert.equal(extractExplicitMemoryFact('Мне сегодня хочется чая'), '');
   assert.equal(extractExplicitMemoryFact('Запомни, что да'), '');
   assert.equal(extractExplicitMemoryFact('Запомни'), '');
+  assert.equal(extractExplicitMemoryFact('Запомни «я обожаю зелёный чай»'), 'я обожаю зелёный чай');
+  assert.equal(extractExplicitMemoryFact('Запомни "мой любимый цвет — синий".'), 'мой любимый цвет — синий');
 });
