@@ -88,7 +88,7 @@ function restartAdvice(files) {
   if (!files.length) return 'Изменённых файлов нет — перезапуск не нужен.';
 
   const siteServer = files.some((file) => /^(server\.js|package\.json|package-lock\.json|start-site\.bat)$/.test(file));
-  const browser = files.some((file) => /^(index\.html|[^/]+\.(css|js))$/.test(file));
+  const browser = files.some((file) => /^(index\.html|[^/]+\.css)$/.test(file));
   const comfy = files.some((file) => /(^|\/)(comfyui|ComfyUI|workflows|workflow)(\/|$)/i.test(file) || /^(start-comfyui\.bat|extra_model_paths\.yaml)$/.test(file));
   const ollama = files.some((file) => /^(start-ai\.bat|Modelfile|ollama\.ya?ml)$/.test(file) || /(^|\/)ollama(\/|$)/i.test(file));
   const monitor = files.some((file) => /^(monitor\.js|start-monitor\.bat)$/.test(file));
@@ -136,7 +136,7 @@ async function pull() {
 }
 
 function onKey(key) {
-  if (key === '\\u0003' || key.toLowerCase() === 'q') {
+  if (key === '\u0003' || key.toLowerCase() === 'q') {
     stopped = true;
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
     process.stdin.pause();
