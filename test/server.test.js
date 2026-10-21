@@ -354,3 +354,17 @@ test('browser memory commands explicitly remember facts and reject invalid lengt
   assert.match(invalid, /от 4 до 240 символов/u);
   assert.equal(context.state.memory.length, 2);
 });
+
+test('model-generated preferences cannot overwrite explicitly saved preferences', () => {
+  const { mergeCharacterMemory } = require('../server.js');
+  const now = Date.now();
+  const merged = mergeCharacterMemory([
+    { text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'explicit' },
+    { text: 'У меня кот Барсик', kind: 'fact', updatedAt: now - 1000, source: 'explicit' },
+  ], ['Я больше не пью кофе', 'У меня собака Рекс'], now);
+  assert.equal(merged.filter(item => /кофе/i.test(item.text)).length, 1);
+  assert.match(merged.find(item => /кофе/i.test(item.text)).text, /люблю кофе/u);
+  assert.equal(merged.find(item => /кофе/i.test(item.text)).source, 'explicit');
+  assert.ok(merged.some(item => /собака Рекс/u.test(item.text)));
+  assert.ok(merged.some(item => /кот Барсик/u.test(item.text)));
+});
