@@ -734,4 +734,8 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(port, '127.0.0.1', () => console.log(`LiveRoom: http://127.0.0.1:${port}`));
+if (require.main === module) {
+  server.listen(port, '127.0.0.1', () => console.log(`LiveRoom: http://127.0.0.1:${port}`));
+}
+
+module.exports = { classifyMemoryFact, mergeCharacterMemory, memoryTextForPrompt };
