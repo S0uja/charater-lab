@@ -96,16 +96,57 @@ function outfitChanged(text) {
 }
 
 function keepGroundedMemoryFacts(facts, userMessage) {
-  const generic = new Set('пользователь собеседник я мне мой моя мое мои меня моего моей у он она его ее мы вы твой твоя твое ваши запомни также теперь сегодня вчера люблю нравится хочу факт пользовательский'.split(' '));
-  const tokenize = (text) => String(text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').match(/[\p{L}\p{N}]{3,}/gu) || [];
+  const generic = new Set('пользователь собеседник я мне мой моя мое мои меня моего моей у он она его ее мы вы твой твоя твое ваши запомни также теперь сегодня вчера люблю нравится хочу факт пользовательский что это'.split(' '));
+  const tokenize = (text) => String(text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').match(/[\\p{L}\\p{N}]{3,}/gu) || [];
   const evidence = tokenize(userMessage);
   return (Array.isArray(facts) ? facts : []).filter((fact) => {
     if (typeof fact !== 'string') return false;
-    return tokenize(fact).filter((word) => !generic.has(word)).every((word) => {
+    const words = tokenize(fact).filter((word) => !generic.has(word));
+    if (!words.length) return false;
+    return words.every((word) => {
       const stem = word.slice(0, Math.min(word.length, 4));
       return evidence.some((sourceWord) => sourceWord === word || sourceWord.startsWith(stem) || (stem.length >= 4 && word.startsWith(sourceWord.slice(0, 4))));
     });
   }).slice(0, 2).map((fact) => fact.slice(0, 240));
+}
+
+function classifyMemoryFact(fact) {
+  const text = String(fact || '').trim().slice(0, 240);
+  const normalized = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
+  const temporary = /(?:сегодня|сейчас|на этой неделе|завтра|вчера|пока что|временно|на время|в данный момент)/iu.test(normalized);
+  const preference = /(?:люблю|обожаю|нравится|предпочитаю|не люблю|ненавижу|терпеть не могу|мне по душе|мой любим|моя любим|мое любим|мои любим)/iu.test(normalized);
+  return { text, kind: temporary ? 'temporary' : preference ? 'preference' : 'fact', updatedAt: Date.now(), source: 'conversation' };
+}
+
+function mergeCharacterMemory(existing, incoming, now = Date.now()) {
+  const result = [];
+  const indexes = new Map();
+  const keyOf = (item) => String(typeof item === 'string' ? item : item?.text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+  for (const raw of Array.isArray(existing) ? existing : []) {
+    const item = typeof raw === 'string' ? classifyMemoryFact(raw) : { ...raw, text: String(raw?.text || '').slice(0, 240), kind: ['fact', 'preference', 'temporary'].includes(raw?.kind) ? raw.kind : classifyMemoryFact(raw?.text).kind, updatedAt: Number(raw?.updatedAt) || now, source: raw?.source === 'explicit' ? 'explicit' : 'conversation' };
+    const key = keyOf(item);
+    if (!key || (item.kind === 'temporary' && now - item.updatedAt > 7 * 24 * 60 * 60 * 1000)) continue;
+    const index = indexes.get(key);
+    if (index === undefined) { indexes.set(key, result.length); result.push(item); }
+    else if (item.updatedAt >= result[index].updatedAt) result[index] = item;
+  }
+  for (const raw of Array.isArray(incoming) ? incoming : []) {
+    if (typeof raw !== 'string' || raw.trim().length < 4) continue;
+    const item = classifyMemoryFact(raw);
+    const key = keyOf(item);
+    if (!key) continue;
+    const index = indexes.get(key);
+    if (index === undefined) { indexes.set(key, result.length); result.push(item); }
+    else result[index] = { ...item, updatedAt: Math.max(now, result[index].updatedAt) };
+  }
+  return result.slice(-50);
+}
+
+function memoryTextForPrompt(memory, now = Date.now()) {
+  const items = (Array.isArray(memory) ? memory : []).map((item) => typeof item === 'string' ? classifyMemoryFact(item) : item).filter((item) => item && typeof item.text === 'string');
+  const fresh = items.filter((item) => item.kind !== 'temporary' || now - (Number(item.updatedAt) || now) <= 7 * 24 * 60 * 60 * 1000);
+  const selected = [...fresh.filter((item) => item.kind === 'preference').slice(-8), ...fresh.filter((item) => item.kind === 'fact').slice(-10), ...fresh.filter((item) => item.kind === 'temporary').slice(-4)].slice(-20);
+  return selected.map((item) => '- [' + item.kind + '] ' + item.text).join('\\n') || 'Пока нет сохранённых фактов.';
 }
 
 function extractExplicitMemoryFact(userMessage) {
@@ -443,7 +484,7 @@ function makeSystemPrompt(character, state) {
   const appearance = String(character.appearance || '').slice(0, 800);
   const scene = String(state.current_scene || 'Персонаж находится у себя и переписывается с пользователем онлайн.').slice(0, 500);
   const outfit = String(state.current_outfit || 'Пока не установлен; определи по недавней переписке и не выдумывай смену одежды.').slice(0, 300);
-  const facts = Array.isArray(state.memory) ? state.memory.slice(-20).map((item) => String(item).slice(0, 240)) : [];
+  const facts = memoryTextForPrompt(state.memory);
   const mood = String(state.mood || 'calm');
   const relationship = Math.max(0, Math.min(100, Number(state.relationship) || 0));
   const relationshipStats = Object.fromEntries(['trust', 'romance', 'affection', 'comfort', 'respect', 'tension', 'familiarity'].map((key) => [key, Math.max(0, Math.min(100, Number(state.relationships?.[key]) || 0))]));
@@ -457,7 +498,7 @@ function makeSystemPrompt(character, state) {
 Текущее настроение: ${mood}. Общая близость: ${relationship}/100. Отдельные стороны отношений (0–100): доверие ${relationshipStats.trust}, романтика ${relationshipStats.romance}, нежность ${relationshipStats.affection}, комфорт рядом ${relationshipStats.comfort}, уважение ${relationshipStats.respect}, напряжение/обида ${relationshipStats.tension}, знакомство ${relationshipStats.familiarity}.
 Текущая сцена персонажа (описывает только её местоположение и действия; собеседник остаётся у себя, если явно не установлена личная встреча): ${scene}
 Текущая одежда персонажа: ${outfit}. Это постоянное состояние между сообщениями. Сохраняй её в следующих ответах и фото. Не добавляй одежду и не меняй её автоматически. Обновляй состояние только если в переписке явно произошло переодевание, персонаж надел или снял конкретную вещь, либо пользователь явно задал новую одежду. Если смены не было, верни current_outfit без изменений.
-Проверенные факты памяти о пользователе: ${facts.length ? facts.join(' | ') : 'Пока нет сохранённых фактов.'} Используй только эти факты для утверждений о прошлых разговорах и предпочтениях пользователя. Не выдумывай, что он любит кофе, о чём обычно говорит или какие события пережил. Если факта нет в памяти и текущей переписке, честно скажи, что не помнишь.
+Память о пользователе (тип указан в квадратных скобках):\n${facts}\nИспользуй только эти факты для утверждений о прошлых разговорах и предпочтениях пользователя. Не выдумывай, что он любит кофе, о чём обычно говорит или какие события пережил. Если факта нет в памяти и текущей переписке, честно скажи, что не помнишь.
 
 Сохраняй непрерывность сцены и отношений. Настроение меняй по смыслу, а не случайно. Отвечай прежде всего на последнюю реплику: не перенаправляй разговор на «что на уме», «поговорим о личном» и похожие общие вопросы без причины. Не повторяй формулировки недавних ответов; не используй дежурные приветствия, терапевтические фразы и одинаковый вопрос в конце каждого сообщения. Если собеседник говорит, что у него всё хорошо, поддержи это и развивай именно эту тему. Учитывай обращение и заданную роль в профиле; не подменяй их внезапно. Для коротких реплик отвечай коротко и по-человечески, с конкретной реакцией и без лишнего пафоса. Не говори, что «даёшь» фото, пока действительно не запросила снимок — ответь естественно и продолжай сцену.
 
