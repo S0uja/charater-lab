@@ -12,6 +12,9 @@ const ollama = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
 const chatModel = process.env.OLLAMA_MODEL || 'hf.co/mradermacher/Katarau-9B-ru-RP-nsfw-GGUF:Q4_K_M';
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const jobs = new Map();
+const JOB_TTL_MS = 30 * 60 * 1000;
+const PUBLIC_PAGES = new Set(['index.html', 'characters.html', 'room.html', 'visual-novel.html']);
+const PUBLIC_ASSET = /^assets\/studio\/[a-z0-9_-]+\.(?:jpe?g|png|webp)$/i;
 
 function json(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -539,14 +542,24 @@ async function handleImage(req, res) {
       const details = queued.error?.message || queued.error || 'ComfyUI отклонил граф изображения.';
       return json(res, 502, { error: typeof details === 'string' ? details : JSON.stringify(details) });
     }
-    jobs.set(id, queued.prompt_id);
+    jobs.set(id, { promptId: queued.prompt_id, createdAt: Date.now() });
+    if (jobs.size > 200) {
+      for (const [jobKey, jobValue] of jobs) {
+        if (Date.now() - jobValue.createdAt > JOB_TTL_MS || jobs.size > 180) jobs.delete(jobKey);
+      }
+    }
     return json(res, 202, { jobId: id });
   } catch (error) { return json(res, 502, { error: error.message || 'Не удалось поставить генерацию изображения в очередь.' }); }
 }
 
 async function handleImageStatus(jobId, res) {
-  const promptId = jobs.get(jobId);
-  if (!promptId) return json(res, 404, { error: 'Задача изображения не найдена.' });
+  const job = jobs.get(jobId);
+  if (!job) return json(res, 404, { error: 'Задача изображения не найдена или срок её хранения истёк.' });
+  if (Date.now() - job.createdAt > JOB_TTL_MS) {
+    jobs.delete(jobId);
+    return json(res, 410, { status: 'error', error: 'Время ожидания изображения истекло. Запусти генерацию ещё раз.' });
+  }
+  const promptId = job.promptId;
   try {
     const response = await comfyFetch(`/history/${encodeURIComponent(promptId)}`, { timeout: 6000 });
     if (!response.ok) return json(res, 502, { error: 'ComfyUI не вернул состояние генерации.' });
@@ -569,7 +582,10 @@ async function handleImageStatus(jobId, res) {
     const queueResponse = await comfyFetch('/queue', { timeout: 5000 });
     const queue = queueResponse.ok ? await queueResponse.json() : {};
     const contains = (items) => (items || []).some((item) => Array.isArray(item) ? item[1] === promptId : item.prompt_id === promptId);
-    return json(res, 200, { status: contains(queue.queue_running) ? 'running' : 'queued' });
+    if (contains(queue.queue_running)) return json(res, 200, { status: 'running' });
+    if (contains(queue.queue_pending)) return json(res, 200, { status: 'queued' });
+    jobs.delete(jobId);
+    return json(res, 200, { status: 'error', error: 'ComfyUI больше не видит эту задачу. Попробуй создать изображение заново.' });
   } catch (error) { return json(res, 502, { error: `Ошибка связи с ComfyUI: ${error.message}` }); }
 }
 
@@ -589,8 +605,33 @@ async function handleGeneratedImage(url, res) {
   } catch { res.writeHead(502); res.end('ComfyUI connection failed'); }
 }
 
+async function handleHealth(res) {
+  const check = async (url) => {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+      return { ok: response.ok, status: response.status };
+    } catch (error) {
+      return { ok: false, error: error.name === 'TimeoutError' ? 'timeout' : 'unavailable' };
+    }
+  };
+  const [ollamaStatus, comfyStatus] = await Promise.all([
+    check(`${ollama}/api/tags`),
+    check(`${comfy}/system_stats`),
+  ]);
+  const ok = ollamaStatus.ok && comfyStatus.ok;
+  return json(res, ok ? 200 : 503, {
+    ok,
+    services: { ollama: ollamaStatus, comfyui: comfyStatus },
+    model: chatModel,
+    uptime_seconds: Math.floor(process.uptime()),
+  });
+}
+
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://127.0.0.1:${port}`);
+  let url;
+  try { url = new URL(req.url, `http://127.0.0.1:${port}`); }
+  catch { res.writeHead(400); return res.end('Bad request'); }
+  if (req.method === 'GET' && url.pathname === '/api/health') return handleHealth(res);
   if (req.method === 'POST' && url.pathname === '/api/chat') return handleChat(req, res);
   if (req.method === 'POST' && url.pathname === '/api/translate-visual-descriptions') return handleTranslateVisualDescriptions(req, res);
   if (req.method === 'POST' && url.pathname === '/api/story-turn') return handleStoryTurn(req, res);
@@ -599,12 +640,17 @@ const server = http.createServer(async (req, res) => {
   const imageJob = /^\/api\/image\/([0-9a-f-]{36})$/i.exec(url.pathname);
   if (req.method === 'GET' && imageJob) return handleImageStatus(imageJob[1], res);
   if (req.method === 'GET' && url.pathname === '/api/generated-image') return handleGeneratedImage(url, res);
-  const requested = decodeURIComponent(url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, ''));
+  if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }); return res.end('Method not allowed'); }
+  let requested;
+  try { requested = decodeURIComponent(url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '')); }
+  catch { res.writeHead(400); return res.end('Bad request'); }
+  if (!PUBLIC_PAGES.has(requested) && !PUBLIC_ASSET.test(requested)) { res.writeHead(404); return res.end('Not found'); }
   const file = path.resolve(root, requested);
-  if (!file.startsWith(root + path.sep) && file !== path.join(root, 'index.html')) { res.writeHead(403); return res.end('Forbidden'); }
+  if (!file.startsWith(root + path.sep)) { res.writeHead(404); return res.end('Not found'); }
   fs.readFile(file, (error, data) => {
     if (error) { res.writeHead(404); return res.end('Not found'); }
     res.writeHead(200, { 'content-type': mime[path.extname(file).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-store' });
+    if (req.method === 'HEAD') return res.end();
     res.end(data);
   });
 });
