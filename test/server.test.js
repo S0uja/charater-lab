@@ -1,0 +1,115 @@
+'use strict';
+
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
+const http = require('node:http');
+const net = require('node:net');
+const path = require('node:path');
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+
+const ROOT = path.resolve(__dirname, '..');
+let child;
+let baseUrl;
+let port;
+
+async function unusedPort() {
+  const server = net.createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  const result = address.port;
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return result;
+}
+
+async function waitForServer(url, timeoutMs = 8000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+  while (Date.now() < deadline) {
+    if (child && child.exitCode !== null) {
+      throw new Error('Server exited early with code ' + child.exitCode);
+    }
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(500) });
+      return response;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error('Server did not become ready: ' + (lastError && lastError.message));
+}
+
+before(async () => {
+  port = await unusedPort();
+  baseUrl = 'http://127.0.0.1:' + port;
+  child = spawn(process.execPath, ['server.js'], {
+    cwd: ROOT,
+    env: { ...process.env, PORT: String(port), OLLAMA_URL: 'http://127.0.0.1:1', COMFY_URL: 'http://127.0.0.1:1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk; });
+  child.stderr.on('data', (chunk) => { output += chunk; });
+  child.on('error', (error) => { output += error.message; });
+  try {
+    await waitForServer(baseUrl + '/');
+  } catch (error) {
+    throw new Error(error.message + '\n' + output);
+  }
+});
+
+after(async () => {
+  if (!child || child.exitCode !== null) return;
+  child.kill('SIGTERM');
+  await Promise.race([
+    once(child, 'exit'),
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
+  if (child.exitCode === null) child.kill('SIGKILL');
+});
+
+test('serves the home page with HTML content type', async () => {
+  const response = await fetch(baseUrl + '/');
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type') || '', /text\/html/i);
+  assert.match(await response.text(), /LiveRoom|<!doctype html/i);
+});
+
+test('supports HEAD for public pages without a response body', async () => {
+  const response = await fetch(baseUrl + '/index.html', { method: 'HEAD' });
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), '');
+});
+
+test('rejects unsupported methods on static paths', async () => {
+  const response = await fetch(baseUrl + '/', { method: 'POST' });
+  assert.equal(response.status, 405);
+  assert.match(response.headers.get('allow') || '', /GET/);
+});
+
+test('does not expose arbitrary files', async () => {
+  for (const url of ['/server.js', '/README.md', '/.git/config', '/missing-file.txt']) {
+    const response = await fetch(baseUrl + url);
+    assert.equal(response.status, 404, url + ' should not be public');
+  }
+});
+
+test('health endpoint reports unavailable dependencies without crashing', async () => {
+  const response = await fetch(baseUrl + '/api/health');
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.equal(body.services.ollama.ok, false);
+  assert.equal(body.services.comfyui.ok, false);
+});
+
+test('rejects malformed percent-encoding in a path', async () => {
+  const response = await new Promise((resolve, reject) => {
+    http.get(baseUrl + '/%E0%A4%A', resolve).on('error', reject);
+  });
+  response.resume();
+  assert.equal(response.statusCode, 400);
+});
