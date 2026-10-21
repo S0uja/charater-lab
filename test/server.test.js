@@ -218,6 +218,14 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   assert.equal(classifyMemoryFact('Предпочитаю короткие ответы').kind, 'preference');
   assert.match(memoryTextForPrompt(merged, now), /\[preference\]/);
   assert.match(memoryTextForPrompt(merged, now), /кот Барсик/);
+  const updated = mergeCharacterMemory(
+    [{ text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'conversation' }],
+    ['Я больше не пью кофе', 'Я люблю читать'],
+    now,
+  );
+  assert.equal(updated.filter(item => /кофе/i.test(item.text)).length, 1);
+  assert.match(updated.find(item => /кофе/i.test(item.text)).text, /больше не пью кофе/i);
+  assert.ok(updated.some(item => /люблю читать/i.test(item.text)));
 });
 test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
   const response = await postJson('/api/chat', {
