@@ -218,6 +218,15 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   assert.equal(classifyMemoryFact('Предпочитаю короткие ответы').kind, 'preference');
   assert.match(memoryTextForPrompt(merged, now), /\[preference\]/);
   assert.match(memoryTextForPrompt(merged, now), /кот Барсик/);
+  const { keepGroundedMemoryFacts } = require('../server.js');
+  assert.deepEqual(
+    keepGroundedMemoryFacts(['Я люблю кофе', 'У меня кот Барсик'], 'Я люблю кофе и у меня кот Барсик'),
+    ['Я люблю кофе', 'У меня кот Барсик'],
+  );
+  assert.deepEqual(
+    keepGroundedMemoryFacts(['У меня есть дракон'], 'Сегодня хорошая погода'),
+    [],
+  );
   const updated = mergeCharacterMemory(
     [{ text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'conversation' }],
     ['Я больше не пью кофе', 'Я люблю читать'],
