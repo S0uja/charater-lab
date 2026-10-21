@@ -14,6 +14,7 @@ const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
 const jobs = new Map();
 const JOB_TTL_MS = 30 * 60 * 1000;
 const MAX_TRACKED_IMAGE_JOBS = 8;
+let pendingImageSubmissions = 0;
 const PUBLIC_PAGES = new Set(['index.html', 'characters.html', 'room.html', 'visual-novel.html']);
 const PUBLIC_ASSET = /^assets\/studio\/[a-z0-9_-]+\.(?:jpe?g|png|webp)$/i;
 
@@ -533,7 +534,7 @@ async function handleImage(req, res) {
 
   // Avoid flooding the GPU queue with repeated clicks or forgotten polling sessions.
   pruneExpiredImageJobs();
-  if (jobs.size >= MAX_TRACKED_IMAGE_JOBS) {
+  if (jobs.size + pendingImageSubmissions >= MAX_TRACKED_IMAGE_JOBS) {
     res.setHeader('retry-after', '10');
     return json(res, 429, {
       error: 'Слишком много незавершённых генераций изображений. Дождись завершения одной из задач и попробуй снова.',
@@ -541,6 +542,8 @@ async function handleImage(req, res) {
     });
   }
 
+  // Reserve capacity before the first await so simultaneous requests cannot all pass the limit.
+  pendingImageSubmissions += 1;
   try {
     // Ollama and SDXL share the same 12 GB GPU; release the chat model before ComfyUI runs.
     try {
@@ -572,6 +575,7 @@ async function handleImage(req, res) {
     jobs.set(id, { promptId: queued.prompt_id, createdAt: Date.now() });
     return json(res, 202, { jobId: id });
   } catch (error) { return json(res, 502, { error: error.message || 'Не удалось поставить генерацию изображения в очередь.' }); }
+  finally { pendingImageSubmissions = Math.max(0, pendingImageSubmissions - 1); }
 }
 
 async function handleImageStatus(jobId, res) {
