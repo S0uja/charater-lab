@@ -174,7 +174,8 @@ async function startDownServices() {
     setTimeout(() => refresh().catch(() => {}), 1500);
   }
 }
-\nasync function pull() {
+
+async function pull() {
   if (busy) {
     lastAction = 'git pull уже выполняется — дождись завершения.';
     lastActionAt = timestamp();
