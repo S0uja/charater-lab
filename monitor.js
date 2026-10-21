@@ -118,8 +118,10 @@ async function pull() {
   draw();
 
   try {
+    const previousHead = await runGit(['rev-parse', 'HEAD']);
     const output = await runGit(['pull', '--ff-only']);
-    const filesText = await runGit(['diff', '--name-only', 'ORIG_HEAD', 'HEAD']).catch(() => '');
+    const currentHead = await runGit(['rev-parse', 'HEAD']);
+    const filesText = previousHead === currentHead ? '' : await runGit(['diff', '--name-only', previousHead, currentHead]).catch(() => '');
     const files = filesText ? filesText.split(/\r?\n/).filter(Boolean) : [];
     const summary = output.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
     lastAction = (summary || 'Pull завершён успешно.') + '\n' + restartAdvice(files);
