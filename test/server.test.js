@@ -183,3 +183,31 @@ test('visual description translation rejects duplicate participant names', async
   assert.match((await response.json()).error, /уникальное имя/i);
 });
 
+test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
+  const response = await postJson('/api/chat', {
+    character: { name: 'Тестовый персонаж' },
+    message: 'Привет',
+    history: [],
+    state: {},
+  });
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.match(body.error, /Ollama|модель/i);
+});
+
+test('story turn API returns a controlled 502 when Ollama is unavailable', async () => {
+  const response = await postJson('/api/story-turn', {
+    story: { starting_scene: 'Комната у окна.', player: { name: 'Аня' }, participants: [] },
+    action: 'Осмотреть комнату',
+    turns: [],
+  });
+  assert.equal(response.status, 502);
+  assert.ok((await response.json()).error);
+});
+
+test('image API returns a controlled 502 when ComfyUI is unavailable', async () => {
+  const response = await postJson('/api/image', { prompt: 'A quiet room with a window' });
+  assert.equal(response.status, 502);
+  assert.ok((await response.json()).error);
+});
+
