@@ -149,9 +149,6 @@ async function startDownServices() {
           started.push('ComfyUI');
         } else if (service.name === 'Ollama') {
           let installed = false;
-          try {
-            await runGit(['--version']); // Verify the command runner is responsive; Ollama itself is checked below.
-          } catch (_) {}
           const check = spawn('where.exe', ['ollama'], { cwd: ROOT, shell: false, windowsHide: true });
           installed = await new Promise((resolve) => {
             check.on('error', () => resolve(false));
