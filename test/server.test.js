@@ -368,3 +368,11 @@ test('model-generated preferences cannot overwrite explicitly saved preferences'
   assert.ok(merged.some(item => /собака Рекс/u.test(item.text)));
   assert.ok(merged.some(item => /кот Барсик/u.test(item.text)));
 });
+
+test('explicit memory extraction keeps user wording and ignores ordinary messages', () => {
+  const { extractExplicitMemoryFact } = require('../server.js');
+  assert.equal(extractExplicitMemoryFact('Запомни, что я обожаю зелёный чай!'), 'я обожаю зелёный чай');
+  assert.equal(extractExplicitMemoryFact('Не забудь: у меня кот Барсик.'), 'у меня кот Барсик');
+  assert.equal(extractExplicitMemoryFact('Мне сегодня хочется чая'), '');
+  assert.equal(extractExplicitMemoryFact('Запомни, что да'), '');
+});
