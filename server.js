@@ -109,8 +109,9 @@ function keepGroundedMemoryFacts(facts, userMessage) {
 }
 
 function extractExplicitMemoryFact(userMessage) {
-  const match = String(userMessage || '').match(/(?:запомни|запиши|не забудь)(?:,\s*пожалуйста)?\s*[:—-]\s*(.{4,500})$/iu);
-  return match ? match[1].trim() : '';
+  const match = String(userMessage || '').match(/(?:запомни|запиши|не забудь)(?:\\s*,?\\s*пожалуйста)?(?:\\s*[:,—–-]\\s*|\\s*,?\\s+(?:что\\s+)?)(.{4,500})$/iu);
+  if (!match) return '';
+  return match[1].trim().replace(/^[«“"]|[»”"]$/gu, '').replace(/[.!?]+$/u, '').trim();
 }
 
 async function requestRpCompletion(messages) {
