@@ -546,7 +546,7 @@ async function handleChat(req, res) {
       mood: ['calm', 'happy', 'curious', 'shy', 'affectionate', 'tired', 'upset', 'playful'].includes(parsed.mood) ? parsed.mood : 'calm',
       relationship_delta: Math.max(-2, Math.min(2, Math.trunc(Number(parsed.relationship_delta) || 0))),
       relationship_changes: Object.fromEntries(['trust', 'romance', 'affection', 'comfort', 'respect', 'tension', 'familiarity'].map((key) => [key, Math.max(-2, Math.min(2, Math.trunc(Number(parsed.relationship_changes?.[key]) || 0)))])),
-      memory_facts: extractExplicitMemoryFact(message) ? [extractExplicitMemoryFact(message)] : keepGroundedMemoryFacts(parsed.memory_facts, message),
+      memory_facts: extractExplicitMemoryFact(message) ? [{ ...classifyMemoryFact(extractExplicitMemoryFact(message)), source: 'explicit' }] : keepGroundedMemoryFacts(parsed.memory_facts, message),
       current_scene: String(parsed.current_scene || state.current_scene || '').slice(0, 500),
       current_outfit: String(state.current_outfit && !outfitChanged(`${message}\n${parsed.reply}`) ? state.current_outfit : parsed.current_outfit || state.current_outfit || '').slice(0, 300),
       image_intent: Boolean(parsed.image_intent) && /\b(?:photo|picture|selfie|pic)\b|фото|фотк|селфи|сним(?:и|ок)|покажи\s+(?:себя|что|как)|пришли\s+(?:фото|снимок)|скинь\s+(?:фото|фотку|снимок)/iu.test(message),
