@@ -168,7 +168,9 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
     if (index === undefined) { indexes.set(key, result.length); result.push(item); }
     else result[index] = { ...item, updatedAt: Math.max(now, result[index].updatedAt) };
   }
-  return result.slice(-50);
+  const explicit = result.filter((item) => item.source === 'explicit');
+  const other = result.filter((item) => item.source !== 'explicit');
+  return explicit.length >= 50 ? explicit.slice(-50) : [...explicit, ...other.slice(-Math.max(0, 50 - explicit.length))];
 }
 
 function memoryTextForPrompt(memory, now = Date.now()) {
