@@ -57,10 +57,10 @@ function exportConversation(){
     lines.push(`[${time}] ${role}:`,content,'');
   }
   if(!messages.length) lines.push('Переписка пока пуста.');
-  const blob=new Blob(['\\ufeff'+lines.join('\\n')],{type:'text/plain;charset=utf-8'});
+  const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/plain;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const link=document.createElement('a');
-  const safeName=String(profile.name||'character').replace(/[<>:"/\\\\|?*\\x00-\\x1f]/gu,'_').trim().slice(0,60)||'character';
+  const safeName=String(profile.name||'character').replace(/[<>:"/\\|?*\x00-\x1f]/gu,'_').trim().slice(0,60)||'character';
   link.href=url;
   link.download=`LiveRoom-${safeName}-${new Date().toISOString().slice(0,10)}.txt`;
   document.body.append(link);
