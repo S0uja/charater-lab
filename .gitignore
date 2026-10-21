@@ -1,0 +1,6 @@
+# Completely exclude ComfyUI
+/ComfyUI_windows_portable/
+
+# Log files
+*.log
+server-error.log

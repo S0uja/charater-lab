@@ -1,0 +1,60 @@
+{
+  "frames": 121,
+  "fps": 24.0,
+  "duration_seconds": 5.041666666666667,
+  "mean_adjacent_frame_difference": 2.763,
+  "p95_adjacent_frame_difference": 6.501,
+  "largest_difference_frames": [
+    {
+      "from_frame": 96,
+      "to_frame": 97,
+      "mean_gray_difference": 11.215
+    },
+    {
+      "from_frame": 84,
+      "to_frame": 85,
+      "mean_gray_difference": 9.037
+    },
+    {
+      "from_frame": 82,
+      "to_frame": 83,
+      "mean_gray_difference": 7.32
+    },
+    {
+      "from_frame": 88,
+      "to_frame": 89,
+      "mean_gray_difference": 7.13
+    },
+    {
+      "from_frame": 78,
+      "to_frame": 79,
+      "mean_gray_difference": 7.002
+    },
+    {
+      "from_frame": 70,
+      "to_frame": 71,
+      "mean_gray_difference": 6.812
+    },
+    {
+      "from_frame": 92,
+      "to_frame": 93,
+      "mean_gray_difference": 6.484
+    },
+    {
+      "from_frame": 80,
+      "to_frame": 81,
+      "mean_gray_difference": 6.281
+    },
+    {
+      "from_frame": 102,
+      "to_frame": 103,
+      "mean_gray_difference": 6.096
+    },
+    {
+      "from_frame": 87,
+      "to_frame": 88,
+      "mean_gray_difference": 5.696
+    }
+  ],
+  "note": "Pixel differences are screening signals, not a definitive smoothness score; inspect smoothness-sheet.jpg for actual motion continuity."
+}
