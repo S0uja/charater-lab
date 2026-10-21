@@ -37,7 +37,7 @@ function probe(url) {
 }
 
 function clearScreen() {
-  if (process.stdout.isTTY) process.stdout.write('\x1b[2J\x1b[H');
+  if (process.stdout.isTTY) process.stdout.write('\\x1b[2J\\x1b[H');
 }
 
 function draw() {
@@ -67,7 +67,45 @@ async function refresh() {
   draw();
 }
 
-function pull() {
+function runGit(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { cwd: ROOT, shell: false, windowsHide: true });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error((stderr || stdout || 'git завершился с кодом ' + code).trim()));
+    });
+  });
+}
+
+function restartAdvice(files) {
+  if (!files.length) return 'Изменённых файлов нет — перезапуск не нужен.';
+
+  const siteServer = files.some((file) => /^(server\.js|package\.json|package-lock\.json|start-site\.bat)$/.test(file));
+  const browser = files.some((file) => /^(index\.html|[^/]+\.(css|js))$/.test(file));
+  const comfy = files.some((file) => /(^|\/)(comfyui|ComfyUI|workflows|workflow)(\/|$)/i.test(file) || /^(start-comfyui\.bat|extra_model_paths\.yaml)$/.test(file));
+  const ollama = files.some((file) => /^(start-ai\.bat|Modelfile|ollama\.ya?ml)$/.test(file) || /(^|\/)ollama(\/|$)/i.test(file));
+  const monitor = files.some((file) => /^(monitor\.js|start-monitor\.bat)$/.test(file));
+  const advice = [];
+
+  if (siteServer) advice.push('Сайт: перезапусти сервер через start-site.bat (изменились файлы сервера/запуска).');
+  else if (browser) advice.push('Сайт: сервер перезапускать не нужно; обнови вкладку браузера (Ctrl+F5).');
+  if (comfy) advice.push('ComfyUI: перезапусти только ComfyUI, если менялись его настройки или workflow.');
+  if (ollama) advice.push('Ollama: перезапусти только Ollama, если менялись её настройки. Для одних лишь файлов модели перезапуск обычно не нужен.');
+  if (monitor) advice.push('Монитор: перезапусти start-monitor.bat, чтобы загрузить новую версию самого монитора.');
+  if (!advice.length) advice.push('Перезапуск сервисов не требуется для этих файлов.');
+
+  return 'По изменённым файлам:\n' + advice.map((line) => '• ' + line).join('\n') +
+    '\nПерезапускай только перечисленное и по одному компоненту; монитор ничего не перезапускает автоматически.\nФайлы: ' + files.join(', ');
+}
+
+async function pull() {
   if (busy) {
     lastAction = 'git pull уже выполняется — дождись завершения.';
     lastActionAt = timestamp();
@@ -79,38 +117,24 @@ function pull() {
   lastActionAt = timestamp();
   draw();
 
-  const child = spawn('git', ['pull', '--ff-only'], {
-    cwd: ROOT,
-    shell: false,
-    windowsHide: true,
-  });
-
-  let output = '';
-  child.stdout.setEncoding('utf8');
-  child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => { output += chunk; });
-  child.stderr.on('data', (chunk) => { output += chunk; });
-  child.on('error', (error) => {
+  try {
+    const output = await runGit(['pull', '--ff-only']);
+    const filesText = await runGit(['diff', '--name-only', 'ORIG_HEAD', 'HEAD']).catch(() => '');
+    const files = filesText ? filesText.split(/\r?\n/).filter(Boolean) : [];
+    const summary = output.split(/\r?\n/).filter(Boolean).slice(-4).join(' | ');
+    lastAction = (summary || 'Pull завершён успешно.') + '\n' + restartAdvice(files);
+  } catch (error) {
+    lastAction = 'Pull не выполнен: ' + error.message + '. Проверь Git, сеть и локальные изменения.';
+  } finally {
     busy = false;
-    lastAction = 'Не удалось запустить Git: ' + error.message + '. Проверь, установлен ли Git и доступен ли он в PATH.';
-    lastActionAt = timestamp();
-    draw();
-  });
-  child.on('close', (code) => {
-    busy = false;
-    const lines = output.trim().split(/\r?\n/).filter(Boolean);
-    const summary = lines.slice(-5).join(' | ');
-    lastAction = code === 0
-      ? 'Pull завершён успешно. ' + (summary || 'Рабочая ветка уже актуальна.')
-      : 'Pull завершился с кодом ' + code + '. ' + (summary || 'Проверь Git, сеть и локальные изменения.');
     lastActionAt = timestamp();
     draw();
     refresh().catch(() => {});
-  });
+  }
 }
 
 function onKey(key) {
-  if (key === '\u0003' || key.toLowerCase() === 'q') {
+  if (key === '\\u0003' || key.toLowerCase() === 'q') {
     stopped = true;
     if (process.stdin.isTTY) process.stdin.setRawMode(false);
     process.stdin.pause();
