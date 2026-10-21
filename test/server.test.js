@@ -378,6 +378,10 @@ test('browser memory commands explicitly remember facts and reject invalid lengt
   assert.match(saved, /Запомнила/u);
   assert.equal(context.state.memory.length, 2);
   assert.ok(context.state.memory.some(item => item.text === 'я обожаю чай' && item.source === 'explicit'));
+  const protectedPreference = vm.runInContext("mergeMemoryFacts([{text:'Я люблю кофе',kind:'preference',updatedAt:Date.now()-1000,source:'explicit'}], ['Я больше не пью кофе'])", context);
+  assert.equal(protectedPreference.filter(item => /кофе/u.test(item.text)).length, 1);
+  assert.match(protectedPreference[0].text, /люблю кофе/u);
+  assert.equal(protectedPreference[0].source, 'explicit');
   const invalid = vm.runInContext("applyMemoryCommand('Запомни, что да')", context);
   assert.match(invalid, /от 4 до 240 символов/u);
   assert.equal(context.state.memory.length, 2);
