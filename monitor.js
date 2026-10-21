@@ -55,7 +55,7 @@ function draw() {
     console.log(status.padEnd(13) + ' ' + service.name.padEnd(10) + ' ' + service.detail.padEnd(23) + ' ' + extra);
   }
   console.log('');
-  console.log(' [R] Pull из GitHub    [Q] Выход');
+  console.log(' [S] Запустить недостающие службы    [R] Pull из GitHub    [Q] Выход');
   console.log('');
   console.log(busy ? 'Выполняется git pull…' : (lastActionAt ? '[' + lastActionAt + '] ' + lastAction : lastAction));
   console.log('');
@@ -105,7 +105,79 @@ function restartAdvice(files) {
     '\nПерезапускай только перечисленное и по одному компоненту; монитор ничего не перезапускает автоматически.\nФайлы: ' + files.join(', ');
 }
 
-async function pull() {
+
+function launchWindow(title, command) {
+  const child = spawn('cmd.exe', ['/c', 'start', title, 'cmd.exe', '/k', command], {
+    cwd: ROOT,
+    shell: false,
+    windowsHide: false,
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.on('error', (error) => {
+    lastAction = 'Не удалось открыть окно для запуска ' + title + ': ' + error.message;
+    lastActionAt = timestamp();
+    draw();
+  });
+  child.unref();
+}
+
+async function startDownServices() {
+  if (busy) {
+    lastAction = 'Подожди завершения текущей операции.';
+    lastActionAt = timestamp();
+    draw();
+    return;
+  }
+  busy = true;
+  lastAction = 'Проверяю службы перед запуском…';
+  lastActionAt = timestamp();
+  draw();
+  try {
+    await refresh();
+    const down = services.filter((service) => !lastStates.get(service.name)?.ok);
+    if (!down.length) {
+      lastAction = 'Все службы уже работают — запуск не требуется.';
+    } else {
+      const started = [];
+      for (const service of down) {
+        if (service.name === 'Сайт') {
+          launchWindow('LiveRoom site launcher', 'cd /d "' + ROOT + '" && call start-site.bat');
+          started.push('сайт');
+        } else if (service.name === 'ComfyUI') {
+          launchWindow('LiveRoom ComfyUI', 'cd /d "' + ROOT + '" && call start-comfyui.bat');
+          started.push('ComfyUI');
+        } else if (service.name === 'Ollama') {
+          let installed = false;
+          try {
+            await runGit(['--version']); // Verify the command runner is responsive; Ollama itself is checked below.
+          } catch (_) {}
+          const check = spawn('where.exe', ['ollama'], { cwd: ROOT, shell: false, windowsHide: true });
+          installed = await new Promise((resolve) => {
+            check.on('error', () => resolve(false));
+            check.on('close', (code) => resolve(code === 0));
+          });
+          if (installed) {
+            launchWindow('Ollama service', 'ollama serve');
+            started.push('Ollama');
+          } else {
+            lastAction = 'Ollama не запущена, и команда ollama не найдена. Установи Ollama или проверь PATH.';
+          }
+        }
+      }
+      if (started.length) {
+        lastAction = 'Отправил команды запуска только для неработающих служб: ' + started.join(', ') +
+          '. Новые окна останутся открытыми для просмотра ошибок. Проверяю готовность…';
+      }
+    }
+  } finally {
+    busy = false;
+    lastActionAt = timestamp();
+    draw();
+    setTimeout(() => refresh().catch(() => {}), 1500);
+  }
+}
+\nasync function pull() {
   if (busy) {
     lastAction = 'git pull уже выполняется — дождись завершения.';
     lastActionAt = timestamp();
@@ -143,7 +215,7 @@ function onKey(key) {
     console.log('\nМонитор закрыт.');
     process.exit(0);
   }
-  if (key.toLowerCase() === 'r') pull();
+  if (key.toLowerCase() === 'r') pull();\n  if (key.toLowerCase() === 's') startDownServices();
 }
 
 async function main() {
