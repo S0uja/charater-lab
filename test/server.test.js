@@ -335,3 +335,22 @@ test('browser memory commands delete and correct only the requested memory', () 
   assert.match(missing, /Не нашла/u);
   assert.equal(context.state.memory.length, 1);
 });
+
+test('browser memory commands explicitly remember facts and reject invalid lengths', () => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const html = fs.readFileSync(path.join(ROOT, 'room.html'), 'utf8');
+  const start = html.indexOf('function normalizeMemoryFact');
+  const end = html.indexOf('async function send(forcePhoto=false)');
+  assert.ok(start >= 0 && end > start, 'memory helpers should exist in room.html');
+  const context = { state: { memory: [{ text: 'У меня кот Барсик', kind: 'fact', updatedAt: Date.now(), source: 'explicit' }] }, Date, Set, String, Array, Math };
+  vm.createContext(context);
+  vm.runInContext(html.slice(start, end), context);
+  const saved = vm.runInContext("applyMemoryCommand('Запомни, что я обожаю чай')", context);
+  assert.match(saved, /Запомнила/u);
+  assert.equal(context.state.memory.length, 2);
+  assert.ok(context.state.memory.some(item => item.text === 'я обожаю чай' && item.source === 'explicit'));
+  const invalid = vm.runInContext("applyMemoryCommand('Запомни, что да')", context);
+  assert.match(invalid, /от 4 до 240 символов/u);
+  assert.equal(context.state.memory.length, 2);
+});
