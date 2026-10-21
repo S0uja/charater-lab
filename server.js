@@ -137,8 +137,8 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
     if (!key) continue;
     const topicKey = (value) => String(value || '')
       .toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
-      .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
-      .split(/\\s+/u)
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .split(/\s+/u)
       .filter((word) => word && !new Set(['я','мне','мой','моя','мое','мои','меня','люблю','обожаю','нравится','предпочитаю','не','больше','перестал','перестала','пью','ем','курю','читаю','смотрю','играю','использую','терпеть','могу','не','очень','теперь','уже']).has(word))
       .join(' ');
     let index = indexes.get(key);
