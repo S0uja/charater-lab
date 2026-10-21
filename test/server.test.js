@@ -433,3 +433,12 @@ test('room persists and restores profile, state, and messages in IndexedDB', () 
   assert.match(html, /persist\(\)\.catch\(error=>console\.error\('Не удалось сохранить диалог',error\)\)/u);
   assert.match(html, /if\(item\.kind==='image'\)\{const blob=await get\(item\.imageKey\)/u);
 });
+
+test('reply repetition guard detects duplicates but allows distinct replies', () => {
+  const { repeatsRecentReply } = require('../server.js');
+  const previous = ['Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день'];
+  assert.equal(repeatsRecentReply('Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день', previous), true);
+  assert.equal(repeatsRecentReply('Я рада тебя видеть, расскажи, как прошёл твой сегодняшний день!', previous), true);
+  assert.equal(repeatsRecentReply('Интересно, что ты думаешь об этой новой идее и почему она тебе нравится', previous), false);
+  assert.equal(repeatsRecentReply('Привет', previous), false);
+});
