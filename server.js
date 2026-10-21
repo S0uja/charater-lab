@@ -191,8 +191,10 @@ async function handleTranslateVisualDescriptions(req, res) {
   const source = {
     premise: String(story.premise || ''), starting_scene: String(story.starting_scene || ''),
     player: { name: String(player.name || ''), role: String(player.role || ''), description: String(player.description || ''), appearance: String(player.appearance || ''), outfit: String(player.outfit || '') },
-    participants: participants.map((person) => ({ name: String(person.name || ''), role: String(person.role || ''), description: String(person.description || ''), appearance: String(person.appearance || ''), outfit: String(person.outfit || '') })),
+    participants: participants.map((person, index) => ({ name: String(person.name || `Участник ${index + 1}`).trim(), role: String(person.role || ''), description: String(person.description || ''), appearance: String(person.appearance || ''), outfit: String(person.outfit || '') })),
   };
+  const participantKeys = source.participants.map((person) => person.name.toLocaleLowerCase('en-US'));
+  if (new Set(participantKeys).size !== participantKeys.length) return json(res, 400, { error: 'У каждого участника истории должно быть уникальное имя.' });
   const prompt = 'Translate the story and character descriptions below into clear, natural English specifically for a photorealistic image-generation model. Preserve names exactly. Translate every non-empty role, description, appearance, premise, and starting scene. Preserve every numeric age exactly and attach it only to the same named character it belongs to; never transfer, average, or merge traits between characters. For each character, split appearance into stable physical identity (age, face, hair, body) and a separate outfit field containing only clothing explicitly specified in the source. Do not invent clothes; leave outfit empty if none were specified. Keep all details; leave empty source strings empty. Return only the requested JSON object.';
   try {
     const upstream = await fetch(`${ollama}/api/chat`, {
@@ -204,10 +206,17 @@ async function handleTranslateVisualDescriptions(req, res) {
     if (!upstream.ok) return json(res, upstream.status, { error: result.error || 'Не удалось подготовить английские описания.' });
     const parsed = parseJsonText(result.message?.content || '');
     if (!parsed?.player || !Array.isArray(parsed.participants)) return json(res, 502, { error: 'Модель вернула описания в неверном формате.' });
+    const translatedByName = new Map(parsed.participants.map((person) => [String(person?.name || '').trim().toLocaleLowerCase('en-US'), person]));
+    if (source.participants.some((person) => !translatedByName.has(person.name.toLocaleLowerCase('en-US')))) {
+      return json(res, 502, { error: 'Переводчик изменил или пропустил имя участника. Попробуй подготовить историю ещё раз.' });
+    }
     return json(res, 200, { visual_context: {
       premise: String(parsed.premise || '').slice(0, 1600), starting_scene: String(parsed.starting_scene || '').slice(0, 1600),
       player: { name: source.player.name, role: String(parsed.player.role || '').slice(0, 160), description: String(parsed.player.description || '').slice(0, 900), appearance: String(parsed.player.appearance || '').slice(0, 500), outfit: String(parsed.player.outfit || '').slice(0, 300) },
-      participants: source.participants.map((person, index) => ({ name: person.name, role: String(parsed.participants[index]?.role || '').slice(0, 160), description: String(parsed.participants[index]?.description || '').slice(0, 900), appearance: String(parsed.participants[index]?.appearance || '').slice(0, 500), outfit: String(parsed.participants[index]?.outfit || '').slice(0, 300) })),
+      participants: source.participants.map((person) => {
+        const translated = translatedByName.get(person.name.toLocaleLowerCase('en-US'));
+        return { name: person.name, role: String(translated.role || '').slice(0, 160), description: String(translated.description || '').slice(0, 900), appearance: String(translated.appearance || '').slice(0, 500), outfit: String(translated.outfit || '').slice(0, 300) };
+      }),
     } });
   } catch (error) {
     return json(res, 502, { error: error.name === 'TimeoutError' ? 'Перевод описаний занял слишком много времени.' : 'Не удалось подключиться к Ollama.', detail: error.message });
@@ -223,7 +232,7 @@ function initialWorldState(story, cast, currentScene = '') {
     characters: cast.map((character, index) => {
       const profile = profiles.find((item) => item && item.name === character.name) || {};
       const appearance = String(profile.appearance || character.appearance || character.description || 'Appearance not specified').slice(0, 700);
-      return { name: character.name, role: String(profile.role || character.role).slice(0, 160), appearance, description: String(profile.description || character.description || '').slice(0, 700), present: true, visible: index !== 0, outfit: String(profile.outfit || '').slice(0, 300), position: 'As established in the opening scene', pose: 'As established in the opening scene', expression: 'As established in the opening scene' };
+      return { name: character.name, role: String(profile.role || character.role).slice(0, 160), appearance, description: String(profile.description || character.description || '').slice(0, 700), present: true, visible: true, outfit: String(profile.outfit || '').slice(0, 300), position: 'As established in the opening scene', pose: 'As established in the opening scene', expression: 'As established in the opening scene' };
     }),
     objects: [],
   };
