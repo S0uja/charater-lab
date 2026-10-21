@@ -309,3 +309,29 @@ test('health endpoint always includes uptime and both service states', async () 
   assert.equal(typeof body.services.comfyui.ok, 'boolean');
 });
 
+
+test('browser memory commands delete and correct only the requested memory', () => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const html = fs.readFileSync(path.join(ROOT, 'room.html'), 'utf8');
+  const start = html.indexOf('function normalizeMemoryFact');
+  const end = html.indexOf('async function send(forcePhoto=false)');
+  assert.ok(start >= 0 && end > start, 'memory helpers should exist in room.html');
+  const context = { state: { memory: [
+    { text: 'Я люблю кофе', kind: 'preference', updatedAt: Date.now(), source: 'explicit' },
+    { text: 'У меня кот Барсик', kind: 'fact', updatedAt: Date.now(), source: 'explicit' },
+  ] }, Date, Set, String, Array, Math };
+  vm.createContext(context);
+  vm.runInContext(html.slice(start, end), context);
+  const deleted = vm.runInContext("applyMemoryCommand('Забудь, что я люблю кофе')", context);
+  assert.match(deleted, /Удалила из памяти/u);
+  assert.equal(context.state.memory.length, 1);
+  assert.match(context.state.memory[0].text, /кот Барсик/u);
+  const edited = vm.runInContext("applyMemoryCommand('Исправь воспоминание У меня кот Барсик на У меня собака Рекс')", context);
+  assert.match(edited, /Обновила воспоминание/u);
+  assert.equal(context.state.memory.length, 1);
+  assert.match(context.state.memory[0].text, /собака Рекс/u);
+  const missing = vm.runInContext("applyMemoryCommand('Забудь несуществующий факт')", context);
+  assert.match(missing, /Не нашла/u);
+  assert.equal(context.state.memory.length, 1);
+});
