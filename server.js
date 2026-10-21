@@ -140,26 +140,27 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
     if (index === undefined) { indexes.set(key, result.length); result.push(item); }
     else if (item.updatedAt >= result[index].updatedAt) result[index] = item;
   }
+  const topicKey = (value) => String(value || '')
+    .toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(/\s+/u)
+    .filter((word) => word && !new Set(['я','мне','мой','моя','мое','мои','меня','люблю','обожаю','нравится','предпочитаю','не','больше','перестал','перестала','пью','ем','курю','читаю','смотрю','играю','использую','терпеть','могу','очень','теперь','уже']).has(word))
+    .join(' ');
   for (const raw of Array.isArray(incoming) ? incoming : []) {
     if (typeof raw !== 'string' || raw.trim().length < 4) continue;
     const item = classifyMemoryFact(raw);
     const key = keyOf(item);
     if (!key) continue;
-    const topicKey = (value) => String(value || '')
-      .toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .split(/\s+/u)
-      .filter((word) => word && !new Set(['я','мне','мой','моя','мое','мои','меня','люблю','обожаю','нравится','предпочитаю','не','больше','перестал','перестала','пью','ем','курю','читаю','смотрю','играю','использую','терпеть','могу','очень','теперь','уже']).has(word))
-      .join(' ');
     let index = indexes.get(key);
     if (item.kind === 'preference') {
       const topic = topicKey(item.text);
       if (topic) {
         const replacementIndex = result.findIndex((previous) => previous.kind === 'preference' && topicKey(previous.text) === topic);
         if (replacementIndex !== -1) {
-          if (result[replacementIndex].source === 'explicit') continue;
-          indexes.delete(keyOf(result[replacementIndex]));
-          result[replacementIndex] = { ...item, updatedAt: Math.max(now, result[replacementIndex].updatedAt) };
+          const previous = result[replacementIndex];
+          if (previous.source === 'explicit') continue;
+          indexes.delete(keyOf(previous));
+          result[replacementIndex] = { ...item, updatedAt: Math.max(now, previous.updatedAt) };
           indexes.set(key, replacementIndex);
           continue;
         }
