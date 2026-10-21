@@ -211,3 +211,29 @@ test('image API returns a controlled 502 when ComfyUI is unavailable', async () 
   assert.ok((await response.json()).error);
 });
 
+test('image API rejects oversized JSON bodies with 413', async () => {
+  const response = await fetch(baseUrl + '/api/image', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt: 'x'.repeat(110_000) }),
+  });
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /слишком большой/i);
+});
+
+test('image API rejects malformed JSON with a client error', async () => {
+  const response = await fetch(baseUrl + '/api/image', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{"prompt":',
+  });
+  assert.equal(response.status, 400);
+  assert.ok((await response.json()).error);
+});
+
+test('API routes reject unsupported methods explicitly', async () => {
+  const response = await fetch(baseUrl + '/api/chat', { method: 'PUT' });
+  assert.equal(response.status, 405);
+  assert.match(response.headers.get('allow') || '', /GET, HEAD/i);
+});
+
