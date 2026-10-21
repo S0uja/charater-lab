@@ -164,7 +164,22 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
 function memoryTextForPrompt(memory, now = Date.now()) {
   const items = (Array.isArray(memory) ? memory : []).map((item) => typeof item === 'string' ? classifyMemoryFact(item) : item).filter((item) => item && typeof item.text === 'string');
   const fresh = items.filter((item) => item.kind !== 'temporary' || now - (Number(item.updatedAt) || now) <= 7 * 24 * 60 * 60 * 1000);
-  const selected = [...fresh.filter((item) => item.kind === 'preference').slice(-8), ...fresh.filter((item) => item.kind === 'fact').slice(-10), ...fresh.filter((item) => item.kind === 'temporary').slice(-4)].slice(-20);
+  const unique = new Map();
+  for (const item of fresh) {
+    const key = String(item.text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (!key) continue;
+    const previous = unique.get(key);
+    if (!previous || (Number(item.updatedAt) || 0) >= (Number(previous.updatedAt) || 0)) unique.set(key, item);
+  }
+  const itemsByPriority = [...unique.values()].sort((a, b) => {
+    const priority = (item) => item.source === 'explicit' ? 3 : item.kind === 'preference' ? 2 : item.kind === 'fact' ? 1 : 0;
+    return priority(b) - priority(a) || (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
+  });
+  const selected = [
+    ...itemsByPriority.filter((item) => item.kind === 'preference').slice(0, 8),
+    ...itemsByPriority.filter((item) => item.kind === 'fact').slice(0, 10),
+    ...itemsByPriority.filter((item) => item.kind === 'temporary').slice(0, 4),
+  ].slice(0, 20);
   return selected.map((item) => '- [' + item.kind + '] ' + item.text).join('\n') || 'Пока нет сохранённых фактов.';
 }
 
