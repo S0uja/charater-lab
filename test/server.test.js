@@ -360,8 +360,8 @@ test('browser memory commands delete and correct only the requested memory', () 
   assert.equal(context.state.memory.length, 1);
   assert.match(context.state.memory[0].text, /собака Рекс/u);
   const listed = vm.runInContext("applyMemoryCommand('Что ты обо мне помнишь?')", context);
-  assert.match(listed, /кот Барсик/u);
   assert.match(listed, /собака Рекс/u);
+  assert.doesNotMatch(listed, /кот Барсик/u);
   const emptyContext = { state: { memory: [] }, Date, Set, String, Array, Math };
   vm.createContext(emptyContext);
   vm.runInContext(html.slice(start, end), emptyContext);
