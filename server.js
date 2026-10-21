@@ -572,7 +572,7 @@ async function handleImage(req, res) {
       const details = queued.error?.message || queued.error || 'ComfyUI отклонил граф изображения.';
       return json(res, 502, { error: typeof details === 'string' ? details : JSON.stringify(details) });
     }
-    jobs.set(id, { promptId: queued.prompt_id, createdAt: Date.now() });
+    jobs.set(id, { promptId: queued.prompt_id, createdAt: Date.now(), state: 'queued' });
     return json(res, 202, { jobId: id });
   } catch (error) { return json(res, 502, { error: error.message || 'Не удалось поставить генерацию изображения в очередь.' }); }
   finally { pendingImageSubmissions = Math.max(0, pendingImageSubmissions - 1); }
@@ -612,8 +612,14 @@ async function handleImageStatus(jobId, res) {
     if (!queueResponse.ok) return json(res, 502, { error: 'ComfyUI не смог проверить очередь генерации. Повтори проверку позже.' });
     const queue = await queueResponse.json();
     const contains = (items) => (items || []).some((item) => Array.isArray(item) ? item[1] === promptId : item.prompt_id === promptId);
-    if (contains(queue.queue_running)) return json(res, 200, { status: 'running' });
-    if (contains(queue.queue_pending)) return json(res, 200, { status: 'queued' });
+    if (contains(queue.queue_running)) {
+      job.state = 'running';
+      return json(res, 200, { status: 'running' });
+    }
+    if (contains(queue.queue_pending)) {
+      job.state = 'queued';
+      return json(res, 200, { status: 'queued' });
+    }
     jobs.delete(jobId);
     return json(res, 200, { status: 'error', error: 'ComfyUI больше не видит эту задачу. Попробуй создать изображение заново.' });
   } catch (error) { return json(res, 502, { error: `Ошибка связи с ComfyUI: ${error.message}` }); }
