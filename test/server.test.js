@@ -163,6 +163,27 @@ test('generated-image endpoint rejects path traversal attempts', async () => {
   assert.match(await response.text(), /Invalid image path/i);
 });
 
+test('generated-image endpoint rejects absolute subfolders', async () => {
+  for (const subfolder of ['%2Fetc', '%5CWindows', 'C%3A%5CWindows']) {
+    const response = await fetch(baseUrl + '/api/generated-image?filename=render.png&subfolder=' + subfolder);
+    assert.equal(response.status, 400, subfolder);
+    assert.match(await response.text(), /Invalid image path/i);
+  }
+});
+
+test('generated-image endpoint rejects dot segments in nested subfolders', async () => {
+  for (const subfolder of ['assets%2F..%2F..', 'assets%2F.%2Fprivate', 'assets%5C..%5Cprivate']) {
+    const response = await fetch(baseUrl + '/api/generated-image?filename=render.png&subfolder=' + subfolder);
+    assert.equal(response.status, 400, subfolder);
+  }
+});
+
+test('generated-image endpoint rejects non-output types', async () => {
+  const response = await fetch(baseUrl + '/api/generated-image?filename=render.png&type=input');
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /Invalid image path/i);
+});
+
 test('visual description translation rejects missing scene/player fields', async () => {
   const response = await postJson('/api/translate-visual-descriptions', {
     story: { starting_scene: '', player: { name: '' }, participants: [] },
