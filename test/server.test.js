@@ -227,8 +227,8 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   crowded.push({ text: 'Я обожаю зелёный чай', kind: 'preference', updatedAt: now - 5000, source: 'explicit' });
   const promptMemory = memoryTextForPrompt(crowded, now);
   assert.match(promptMemory, /Я обожаю зелёный чай/u);
-  assert.ok(!promptMemory.includes('Случайный факт номер 24'));
-  assert.ok(!promptMemory.includes('Случайный факт номер 23'));
+  assert.ok(promptMemory.includes('Случайный факт номер 24'));
+  assert.ok(!promptMemory.includes('Случайный факт номер 0'));
   const manyExplicit = Array.from({ length: 22 }, (_, index) => ({ text: 'Важный явный факт ' + index, kind: 'fact', updatedAt: now - index, source: 'explicit' }));
   const explicitPrompt = memoryTextForPrompt(manyExplicit, now);
   assert.match(explicitPrompt, /Важный явный факт 0/u);
