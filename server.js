@@ -147,6 +147,7 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
       if (topic) {
         const replacementIndex = result.findIndex((previous) => previous.kind === 'preference' && topicKey(previous.text) === topic);
         if (replacementIndex !== -1) {
+          if (result[replacementIndex].source === 'explicit') continue;
           indexes.delete(keyOf(result[replacementIndex]));
           result[replacementIndex] = { ...item, updatedAt: Math.max(now, result[replacementIndex].updatedAt) };
           indexes.set(key, replacementIndex);
