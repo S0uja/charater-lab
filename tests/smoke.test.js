@@ -67,5 +67,5 @@ test('does not expose server source or project metadata over HTTP', async () => 
 
 test('rejects unsupported methods on static pages', async () => {
   const response = await fetch(base, { method: 'POST' });
-  assert.equal(response.status, 404);
+  assert.equal(response.status, 405);
 });
