@@ -170,7 +170,12 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
   }
   const explicit = result.filter((item) => item.source === 'explicit');
   const other = result.filter((item) => item.source !== 'explicit');
-  return explicit.length >= 50 ? explicit.slice(-50) : [...explicit, ...other.slice(-Math.max(0, 50 - explicit.length))];
+  const ranked = (items) => items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (Number(b.item.updatedAt) || 0) - (Number(a.item.updatedAt) || 0) || a.index - b.index)
+    .map(({ item }) => item);
+  if (explicit.length >= 50) return ranked(explicit).slice(0, 50);
+  return [...explicit, ...ranked(other).slice(0, 50 - explicit.length)];
 }
 
 function memoryTextForPrompt(memory, now = Date.now()) {
