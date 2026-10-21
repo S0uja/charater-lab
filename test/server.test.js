@@ -430,5 +430,6 @@ test('room persists and restores profile, state, and messages in IndexedDB', () 
   assert.match(html, /messages=await get\(`rp:messages:\$\{charId\(\)\}`\)/u);
   assert.match(html, /const savedProfile=active&&await get\(`rp:profile:\$\{active\.id\|\|active\.name\}`\)/u);
   assert.match(html, /await renderHistory\(\)/u);
+  assert.match(html, /persist\(\)\.catch\(error=>console\.error\('Не удалось сохранить диалог',error\)\)/u);
   assert.match(html, /if\(item\.kind==='image'\)\{const blob=await get\(item\.imageKey\)/u);
 });
