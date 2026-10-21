@@ -169,12 +169,12 @@ function memoryTextForPrompt(memory, now = Date.now()) {
 }
 
 function extractExplicitMemoryFact(userMessage) {
-  const match = String(userMessage || '').trim().match(/^(?:запомни|запиши|не\s+забудь)\b([\\s\\S]*)$/iu);
+  const match = String(userMessage || '').trim().match(/^(?:запомни|запиши|не\s+забудь)\b([\s\S]*)$/iu);
   if (!match) return '';
   const fact = match[1].trim()
-    .replace(/^[,，:;—–-]+\\s*/u, '')
-    .replace(/^что\\s+/iu, '')
-    .replace(/^[«“\"]|[»”\"]$/gu, '')
+    .replace(/^[,，:;—–-]+\s*/u, '')
+    .replace(/^что\s+/iu, '')
+    .replace(/^[«“"]|[»”"]$/gu, '')
     .replace(/[.!?]+$/u, '')
     .trim();
   return fact.length >= 4 ? fact.slice(0, 500) : '';
