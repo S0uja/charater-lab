@@ -121,7 +121,7 @@ function classifyMemoryFact(fact) {
 function mergeCharacterMemory(existing, incoming, now = Date.now()) {
   const result = [];
   const indexes = new Map();
-  const keyOf = (item) => String(typeof item === 'string' ? item : item?.text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
+  const keyOf = (item) => String(typeof item === 'string' ? item : item?.text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   for (const raw of Array.isArray(existing) ? existing : []) {
     const item = typeof raw === 'string' ? classifyMemoryFact(raw) : { ...raw, text: String(raw?.text || '').slice(0, 240), kind: ['fact', 'preference', 'temporary'].includes(raw?.kind) ? raw.kind : classifyMemoryFact(raw?.text).kind, updatedAt: Number(raw?.updatedAt) || now, source: raw?.source === 'explicit' ? 'explicit' : 'conversation' };
     const key = keyOf(item);
@@ -146,7 +146,7 @@ function memoryTextForPrompt(memory, now = Date.now()) {
   const items = (Array.isArray(memory) ? memory : []).map((item) => typeof item === 'string' ? classifyMemoryFact(item) : item).filter((item) => item && typeof item.text === 'string');
   const fresh = items.filter((item) => item.kind !== 'temporary' || now - (Number(item.updatedAt) || now) <= 7 * 24 * 60 * 60 * 1000);
   const selected = [...fresh.filter((item) => item.kind === 'preference').slice(-8), ...fresh.filter((item) => item.kind === 'fact').slice(-10), ...fresh.filter((item) => item.kind === 'temporary').slice(-4)].slice(-20);
-  return selected.map((item) => '- [' + item.kind + '] ' + item.text).join('\\n') || 'Пока нет сохранённых фактов.';
+  return selected.map((item) => '- [' + item.kind + '] ' + item.text).join('\n') || 'Пока нет сохранённых фактов.';
 }
 
 function extractExplicitMemoryFact(userMessage) {
