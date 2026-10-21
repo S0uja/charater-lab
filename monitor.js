@@ -107,7 +107,7 @@ function restartAdvice(files) {
 
 
 function launchWindow(title, command) {
-  const child = spawn('cmd.exe', ['/c', 'start', title, 'cmd.exe', '/k', command], {
+  const child = spawn('cmd.exe', ['/c', 'start', '"' + title + '"', '/D', '"' + ROOT + '"', 'cmd.exe', '/k', command], {
     cwd: ROOT,
     shell: false,
     windowsHide: false,
@@ -142,10 +142,10 @@ async function startDownServices() {
       const started = [];
       for (const service of down) {
         if (service.name === 'Сайт') {
-          launchWindow('LiveRoom site launcher', 'cd /d "' + ROOT + '" && call start-site.bat');
+          launchWindow('LiveRoom site launcher', 'call start-site.bat');
           started.push('сайт');
         } else if (service.name === 'ComfyUI') {
-          launchWindow('LiveRoom ComfyUI', 'cd /d "' + ROOT + '" && call start-comfyui.bat');
+          launchWindow('LiveRoom ComfyUI', 'call start-comfyui.bat');
           started.push('ComfyUI');
         } else if (service.name === 'Ollama') {
           let installed = false;
