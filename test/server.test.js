@@ -373,6 +373,8 @@ test('explicit memory extraction keeps user wording and ignores ordinary message
   const { extractExplicitMemoryFact } = require('../server.js');
   assert.equal(extractExplicitMemoryFact('Запомни, что я обожаю зелёный чай!'), 'я обожаю зелёный чай');
   assert.equal(extractExplicitMemoryFact('Не забудь: у меня кот Барсик.'), 'у меня кот Барсик');
+  assert.equal(extractExplicitMemoryFact('Запиши что я читаю фантастику'), 'я читаю фантастику');
   assert.equal(extractExplicitMemoryFact('Мне сегодня хочется чая'), '');
   assert.equal(extractExplicitMemoryFact('Запомни, что да'), '');
+  assert.equal(extractExplicitMemoryFact('Запомни'), '');
 });
