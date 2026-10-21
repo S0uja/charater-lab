@@ -250,6 +250,19 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   assert.equal(updated.filter(item => /кофе/i.test(item.text)).length, 1);
   assert.match(updated.find(item => /кофе/i.test(item.text)).text, /больше не пью кофе/i);
   assert.ok(updated.some(item => /люблю читать/i.test(item.text)));
+  const changedTopic = mergeCharacterMemory(
+    [{ text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'conversation' }],
+    ['Я больше не пью кофе'],
+    now,
+  );
+  assert.equal(changedTopic.filter(item => /кофе/i.test(item.text)).length, 1);
+  assert.match(changedTopic[0].text, /больше не пью кофе/u);
+  const unrelated = mergeCharacterMemory(
+    [{ text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'conversation' }],
+    ['Я люблю читать'],
+    now,
+  );
+  assert.equal(unrelated.filter(item => item.kind === 'preference').length, 2);
 });
 test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
   const response = await postJson('/api/chat', {
