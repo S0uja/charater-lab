@@ -204,6 +204,21 @@ test('visual description translation rejects duplicate participant names', async
   assert.match((await response.json()).error, /уникальное имя/i);
 });
 
+test('chat memory helpers classify, deduplicate, and expire temporary facts', () => {
+  const { classifyMemoryFact, mergeCharacterMemory, memoryTextForPrompt } = require('../server.js');
+  const now = Date.now();
+  const merged = mergeCharacterMemory([
+    { text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'explicit' },
+    { text: 'Сегодня я работаю из дома', kind: 'temporary', updatedAt: now - 8 * 24 * 60 * 60 * 1000, source: 'conversation' },
+    'У меня кот Барсик',
+  ], ['я люблю кофе!', 'Сегодня у меня встреча', 'Предпочитаю короткие ответы'], now);
+  assert.equal(merged.length, 4);
+  assert.equal(merged.filter(item => item.text.toLocaleLowerCase('ru-RU').includes('люблю кофе')).length, 1);
+  assert.ok(!merged.some(item => item.text.includes('работаю из дома')));
+  assert.equal(classifyMemoryFact('Предпочитаю короткие ответы').kind, 'preference');
+  assert.match(memoryTextForPrompt(merged, now), /\\[preference\\]/);
+  assert.match(memoryTextForPrompt(merged, now), /кот Барсик/);
+});
 test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
   const response = await postJson('/api/chat', {
     character: { name: 'Тестовый персонаж' },
