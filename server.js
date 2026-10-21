@@ -114,7 +114,7 @@ function classifyMemoryFact(fact) {
   const text = String(fact || '').trim().slice(0, 240);
   const normalized = text.toLocaleLowerCase('ru-RU').replace(/ё/g, 'е');
   const temporary = /(?:сегодня|сейчас|на этой неделе|завтра|вчера|пока что|временно|на время|в данный момент)/iu.test(normalized);
-  const preference = /(?:люблю|обожаю|нравится|предпочитаю|не люблю|ненавижу|терпеть не могу|мне по душе|мой любим|моя любим|мое любим|мои любим)/iu.test(normalized);
+  const preference = /(?:люблю|обожаю|нравится|предпочитаю|не люблю|ненавижу|терпеть не могу|мне по душе|мой любим|моя любим|мое любим|мои любим|больше не (?:пью|ем|курю|читаю|смотрю|играю|использую)|перестал[а]? (?:пить|есть|курить|читать|смотреть|играть|использовать)|больше не нравится)/iu.test(normalized);
   return { text, kind: temporary ? 'temporary' : preference ? 'preference' : 'fact', updatedAt: Date.now(), source: 'conversation' };
 }
 
@@ -135,7 +135,25 @@ function mergeCharacterMemory(existing, incoming, now = Date.now()) {
     const item = classifyMemoryFact(raw);
     const key = keyOf(item);
     if (!key) continue;
-    const index = indexes.get(key);
+    const topicKey = (value) => String(value || '')
+      .toLocaleLowerCase('ru-RU').replace(/ё/g, 'е')
+      .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
+      .split(/\\s+/u)
+      .filter((word) => word && !new Set(['я','мне','мой','моя','мое','мои','меня','люблю','обожаю','нравится','предпочитаю','не','больше','перестал','перестала','пью','ем','курю','читаю','смотрю','играю','использую','терпеть','могу','не','очень','теперь','уже']).has(word))
+      .join(' ');
+    let index = indexes.get(key);
+    if (item.kind === 'preference') {
+      const topic = topicKey(item.text);
+      if (topic) {
+        const replacementIndex = result.findIndex((previous) => previous.kind === 'preference' && topicKey(previous.text) === topic);
+        if (replacementIndex !== -1) {
+          indexes.delete(keyOf(result[replacementIndex]));
+          result[replacementIndex] = { ...item, updatedAt: Math.max(now, result[replacementIndex].updatedAt) };
+          indexes.set(key, replacementIndex);
+          continue;
+        }
+      }
+    }
     if (index === undefined) { indexes.set(key, result.length); result.push(item); }
     else result[index] = { ...item, updatedAt: Math.max(now, result[index].updatedAt) };
   }
