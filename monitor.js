@@ -107,7 +107,7 @@ function restartAdvice(files) {
 
 
 function launchWindow(title, command) {
-  const child = spawn('cmd.exe', ['/c', 'start', '"' + title + '"', '/D', '"' + ROOT + '"', 'cmd.exe', '/k', command], {
+  const child = spawn('cmd.exe', ['/d', '/k', command], {
     cwd: ROOT,
     shell: false,
     windowsHide: false,
