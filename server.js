@@ -179,7 +179,21 @@ function memoryTextForPrompt(memory, now = Date.now()) {
     ...itemsByPriority.filter((item) => item.kind === 'preference').slice(0, 8),
     ...itemsByPriority.filter((item) => item.kind === 'fact').slice(0, 10),
     ...itemsByPriority.filter((item) => item.kind === 'temporary').slice(0, 4),
-  ].slice(0, 20);
+  ];
+  const explicit = itemsByPriority.filter((item) => item.source === 'explicit');
+  const selectedKeys = new Set(selected.map((item) => String(item.text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim()));
+  for (const item of explicit) {
+    const key = String(item.text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (key && !selectedKeys.has(key)) {
+      const replaceIndex = selected.findIndex((candidate) => candidate.source !== 'explicit');
+      if (replaceIndex >= 0) {
+        selectedKeys.delete(String(selected[replaceIndex].text).toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').replace(/[^\p{L}\p{N}]+/gu, ' ').trim());
+        selected[replaceIndex] = item;
+      } else if (selected.length < 20) selected.push(item);
+      selectedKeys.add(key);
+    }
+  }
+  selected.splice(20);
   return selected.map((item) => '- [' + item.kind + '] ' + item.text).join('\n') || 'Пока нет сохранённых фактов.';
 }
 
