@@ -1,0 +1,12 @@
+{
+  "name": "liveroom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local AI roleplay chat and interactive visual novel",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
