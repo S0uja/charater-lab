@@ -213,7 +213,8 @@ function onKey(key) {
     console.log('\nМонитор закрыт.');
     process.exit(0);
   }
-  if (key.toLowerCase() === 'r') pull();\n  if (key.toLowerCase() === 's') startDownServices();
+  if (key.toLowerCase() === 'r') pull();
+  if (key.toLowerCase() === 's') startDownServices();
 }
 
 async function main() {
