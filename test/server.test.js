@@ -274,6 +274,8 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
   assert.equal(cappedMemory.length, 50);
   assert.ok(cappedMemory.some(item => item.text === 'Мой явно сохранённый важный факт'));
   assert.ok(!cappedMemory.some(item => item.text === 'Факт из разговора 0'));
+  assert.ok(cappedMemory.some(item => item.text === 'Факт из разговора 54'));
+  assert.ok(!cappedMemory.some(item => item.text === 'Факт из разговора 1'));
 });
 test('chat API returns a controlled 502 when Ollama is unavailable', async () => {
   const response = await postJson('/api/chat', {
