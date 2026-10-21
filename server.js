@@ -175,7 +175,9 @@ function extractExplicitMemoryFact(userMessage) {
     .replace(/^[,，:;—–-]+\s*/u, '')
     .replace(/^что\s+/iu, '')
     .trim();
-  fact = fact.replace(/^[«“"]/, '').replace(/[»”"]$/, '').replace(/[.!?]+$/u, '').trim();
+  fact = fact.replace(/[.!?]+$/u, '').trim();
+  fact = fact.replace(/^[«“"]/, '').replace(/[»”"]$/, '').trim();
+  fact = fact.replace(/[.!?]+$/u, '').trim();
   return fact.length >= 4 ? fact.slice(0, 500) : '';
 }
 
