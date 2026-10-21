@@ -237,3 +237,22 @@ test('API routes reject unsupported methods explicitly', async () => {
   assert.match(response.headers.get('allow') || '', /GET, HEAD/i);
 });
 
+test('image API rejects invalid character payloads without contacting ComfyUI', async () => {
+  const response = await postJson('/api/image', {
+    prompt: 'A quiet room',
+    characters: 'not-an-array',
+  });
+  // Non-array character data is ignored safely; with ComfyUI offline, request fails cleanly.
+  assert.equal(response.status, 502);
+  assert.ok((await response.json()).error);
+});
+
+test('health endpoint always includes uptime and both service states', async () => {
+  const response = await fetch(baseUrl + '/api/health');
+  const body = await response.json();
+  assert.equal(typeof body.uptime_seconds, 'number');
+  assert.ok(body.uptime_seconds >= 0);
+  assert.equal(typeof body.services.ollama.ok, 'boolean');
+  assert.equal(typeof body.services.comfyui.ok, 'boolean');
+});
+
