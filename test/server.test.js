@@ -263,6 +263,14 @@ test('chat memory helpers classify, deduplicate, and expire temporary facts', ()
     now,
   );
   assert.equal(unrelated.filter(item => item.kind === 'preference').length, 2);
+  const explicitPreference = mergeCharacterMemory(
+    [{ text: 'Я люблю кофе', kind: 'preference', updatedAt: now - 1000, source: 'explicit' }],
+    ['Я больше не пью кофе'],
+    now,
+  );
+  assert.equal(explicitPreference.filter(item => item.kind === 'preference' && /кофе/u.test(item.text)).length, 1);
+  assert.match(explicitPreference[0].text, /люблю кофе/u);
+  assert.equal(explicitPreference[0].source, 'explicit');
   const crowdedMemory = Array.from({ length: 55 }, (_, index) => ({
     text: 'Факт из разговора ' + index,
     kind: 'fact',
