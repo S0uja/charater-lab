@@ -113,3 +113,73 @@ test('rejects malformed percent-encoding in a path', async () => {
   response.resume();
   assert.equal(response.statusCode, 400);
 });
+
+async function postJson(pathname, body) {
+  return fetch(baseUrl + pathname, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+test('chat API rejects malformed JSON with a client error', async () => {
+  const response = await fetch(baseUrl + '/api/chat', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{"message":',
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /JSON|Unexpected|property|position/i);
+});
+
+test('chat API rejects an empty message before calling Ollama', async () => {
+  const response = await postJson('/api/chat', { message: '   ' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /пустое сообщение/i);
+});
+
+test('story turn API rejects missing required fields before calling Ollama', async () => {
+  const response = await postJson('/api/story-turn', { action: 'Посмотреть вокруг' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /стартовую сцену|главный персонаж|действие игрока/i);
+});
+
+test('image API rejects an empty prompt before contacting ComfyUI', async () => {
+  const response = await postJson('/api/image', { prompt: '   ' });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /сцену для фото/i);
+});
+
+test('image status API returns a clear 404 for unknown job IDs', async () => {
+  const response = await fetch(baseUrl + '/api/image/00000000-0000-4000-8000-000000000000');
+  assert.equal(response.status, 404);
+  const body = await response.json();
+  assert.match(body.error, /задача изображения не найдена/i);
+});
+
+test('generated-image endpoint rejects path traversal attempts', async () => {
+  const response = await fetch(baseUrl + '/api/generated-image?filename=..%2Fserver.js');
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /Invalid image path/i);
+});
+
+test('visual description translation rejects missing scene/player fields', async () => {
+  const response = await postJson('/api/translate-visual-descriptions', {
+    story: { starting_scene: '', player: { name: '' }, participants: [] },
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /стартовая сцена|главный герой/i);
+});
+
+test('visual description translation rejects duplicate participant names', async () => {
+  const response = await postJson('/api/translate-visual-descriptions', {
+    story: {
+      starting_scene: 'Комната у окна.',
+      player: { name: 'Аня' },
+      participants: [{ name: 'Лена' }, { name: 'Лена' }],
+    },
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /уникальное имя/i);
+});
+
