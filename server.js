@@ -629,7 +629,8 @@ async function handleGeneratedImage(url, res) {
   const filename = url.searchParams.get('filename') || '';
   const subfolder = url.searchParams.get('subfolder') || '';
   const type = url.searchParams.get('type') || 'output';
-  if (path.basename(filename) !== filename || !/^[\w. -]+$/.test(filename) || type !== 'output' || subfolder.split(/[\\/]/).some((part) => part === '..')) {
+  const subfolderParts = subfolder ? subfolder.split(/[\\/]/) : [];
+  if (path.basename(filename) !== filename || !/^[\w. -]+$/.test(filename) || type !== 'output' || subfolder.startsWith('/') || subfolder.startsWith('\\\\') || subfolderParts.some((part) => !part || part === '.' || part === '..' || !/^[\w. -]+$/.test(part))) {
     res.writeHead(400); return res.end('Invalid image path');
   }
   try {
