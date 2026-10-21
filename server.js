@@ -169,7 +169,7 @@ function memoryTextForPrompt(memory, now = Date.now()) {
 }
 
 function extractExplicitMemoryFact(userMessage) {
-  const match = String(userMessage || '').trim().match(/^(?:запомни|запиши|не\s+забудь)\b([\s\S]*)$/iu);
+  const match = String(userMessage || '').trim().match(/^(?:запомни|запиши|не\s+забудь)(?=\s|[,!:;—–-]|$)([\s\S]*)$/iu);
   if (!match) return '';
   let fact = match[1].trim()
     .replace(/^[,，:;—–-]+\s*/u, '')
