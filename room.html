@@ -11,7 +11,7 @@
 <header class="top"><div class="brand">◉ <i>LIVE</i> ROOM</div><div class="top-right"><span class="connection" id="connection">локальная модель</span><a class="link" href="/">Режимы</a><a class="link" href="/characters.html">Персонажи</a></div></header>
 <main class="layout">
   <section class="chat">
-    <div class="chathead"><div class="title"><div class="avatar" id="avatar">✦</div><div><b id="charName">Персонаж</b><small id="charBio">Ролевая комната</small></div></div><div class="profile-actions"><button class="ghost" id="newChat">Новый разговор</button></div></div>
+    <div class="chathead"><div class="title"><div class="avatar" id="avatar">✦</div><div><b id="charName">Персонаж</b><small id="charBio">Ролевая комната</small></div></div><div class="profile-actions"><button class="ghost" id="exportChat" title="Скачать переписку в текстовом формате">Экспорт</button><button class="ghost" id="newChat">Новый разговор</button></div></div>
     <div class="messages" id="messages"><div class="welcome" id="welcome"><div class="spark">✦</div><b>Комната открыта</b>Продолжайте разговор — персонаж сохранит его контекст, настроение и важные детали.</div></div>
     <div class="composer"><div class="compose"><textarea id="input" rows="1" placeholder="Напиши сообщение…"></textarea><button class="camera" id="photo" title="Попросить фото">▧</button><button class="send" id="send" title="Отправить">➤</button></div><div class="composer-hint">Enter — отправить · Shift+Enter — новая строка · кнопка фото попросит показать текущую сцену</div></div>
   </section>
@@ -39,6 +39,35 @@ function renderState(){const score=overallRelationship();state.relationship=scor
 function addText(text,role,save=true){$('welcome').style.display='none';const box=document.createElement('div');box.className='bubble '+(role==='user'?'user':'ai');box.textContent=text;const stamp=document.createElement('span');stamp.className='stamp';stamp.textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});box.append(stamp);$('messages').append(box);$('messages').scrollTop=$('messages').scrollHeight;if(save){messages.push({role,content:text,createdAt:Date.now()});persist().catch(error=>console.error('Не удалось сохранить диалог',error))}}
 async function addPhoto(blob,caption,save=true){$('welcome').style.display='none';const card=document.createElement('div');card.className='photo-card';const img=document.createElement('img');img.alt=caption||'Фото персонажа';img.src=URL.createObjectURL(blob);const label=document.createElement('small');label.textContent=caption||'Фото из текущей сцены';card.append(img,label);$('messages').append(card);$('messages').scrollTop=$('messages').scrollHeight;if(save){const key=`rp:image:${charId()}:${crypto.randomUUID()}`;await put(key,blob);messages.push({role:'assistant',content:`[Ты прислала фото: ${caption||'из текущей сцены'}]`,kind:'image',imageKey:key,caption:caption||'Фото из текущей сцены',createdAt:Date.now()});await persist()}}
 async function persist(){await put(messagesKey(),messages);await put(stateKey(),state);await put(profileKey(),profile)}
+function exportConversation(){
+  const lines=[
+    `Диалог с персонажем: ${profile.name||'Персонаж'}`,
+    `Экспортировано: ${new Date().toLocaleString('ru-RU')}`,
+    `Настроение: ${moodNames[state.mood]||moodNames.calm}`,
+    `Отношения: ${overallRelationship()}%`,
+    `Сцена: ${state.current_scene||'не указана'}`,
+    '',
+    '=== Переписка ===',
+    ''
+  ];
+  for(const item of messages){
+    const role=item.role==='user'?'Вы':(profile.name||'Персонаж');
+    const time=item.createdAt?new Date(item.createdAt).toLocaleString('ru-RU'):'';
+    const content=item.kind==='image'?`[Фото персонажа: ${item.caption||'без описания'}]`:String(item.content||'');
+    lines.push(`[${time}] ${role}:`,content,'');
+  }
+  if(!messages.length) lines.push('Переписка пока пуста.');
+  const blob=new Blob(['\\ufeff'+lines.join('\\n')],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('a');
+  const safeName=String(profile.name||'character').replace(/[<>:"/\\\\|?*\\x00-\\x1f]/gu,'_').trim().slice(0,60)||'character';
+  link.href=url;
+  link.download=`LiveRoom-${safeName}-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 async function renderHistory(){for(const item of messages){if(item.kind==='image'){const blob=await get(item.imageKey);if(blob)await addPhoto(blob,item.caption,false)}else addText(item.content,item.role,false)}if(!messages.length)$('welcome').style.display='block'}
 async function setAvatar(blob){if(avatarUrl)URL.revokeObjectURL(avatarUrl);if(!blob){$('avatar').textContent='✦';return}avatarUrl=URL.createObjectURL(blob);const img=document.createElement('img');img.src=avatarUrl;img.alt='Аватар';$('avatar').replaceChildren(img)}
 async function load(){await dbReady;const active=await get('activeCharacter');const savedProfile=active&&await get(`rp:profile:${active.id||active.name}`);profile={...(active||{}),...(savedProfile||await get('meta')||{name:'Новый персонаж',bio:'Персонаж для ролевого чата.',personality:'Естественная, внимательная, с собственным характером.',appearance:''})};profile.name=profile.name||active?.name||'Персонаж';profile.id=profile.id||active?.id||profile.name;state=await get(`rp:state:${charId()}`)||{mood:'calm',relationship:10,current_scene:'Вы только начали знакомиться.',memory:[]};state.relationships={trust:10,romance:0,affection:5,comfort:10,respect:10,tension:0,familiarity:10,...(state.relationships||{})};messages=await get(`rp:messages:${charId()}`)||[];$('charName').textContent=profile.name;$('charBio').textContent=profile.bio||'Ваша ролевая история';$('bio').value=profile.bio||'';$('personality').value=profile.personality||'Отвечай живо и естественно, сохраняй собственную точку зрения.';$('appearance').value=profile.appearance||'';const avatar=await get(`face:${charId()}`)||await get(`face:${profile.name}`)||await get('face');await setAvatar(avatar);renderState();await renderHistory();if(!state.relationship_profile_initialized)relationshipInit=initializeRelationships()}
