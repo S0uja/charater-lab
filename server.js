@@ -97,7 +97,7 @@ function outfitChanged(text) {
 
 function keepGroundedMemoryFacts(facts, userMessage) {
   const generic = new Set('пользователь собеседник я мне мой моя мое мои меня моего моей у он она его ее мы вы твой твоя твое ваши запомни также теперь сегодня вчера люблю нравится хочу факт пользовательский что это'.split(' '));
-  const tokenize = (text) => String(text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').match(/[\\p{L}\\p{N}]{3,}/gu) || [];
+  const tokenize = (text) => String(text || '').toLocaleLowerCase('ru-RU').replace(/ё/g, 'е').match(/[\p{L}\p{N}]{3,}/gu) || [];
   const evidence = tokenize(userMessage);
   return (Array.isArray(facts) ? facts : []).filter((fact) => {
     if (typeof fact !== 'string') return false;
@@ -756,4 +756,4 @@ if (require.main === module) {
   server.listen(port, '127.0.0.1', () => console.log(`LiveRoom: http://127.0.0.1:${port}`));
 }
 
-module.exports = { classifyMemoryFact, mergeCharacterMemory, memoryTextForPrompt };
+module.exports = { classifyMemoryFact, keepGroundedMemoryFacts, mergeCharacterMemory, memoryTextForPrompt };
