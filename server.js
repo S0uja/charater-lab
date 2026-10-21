@@ -85,12 +85,22 @@ function normalizeReply(reply) {
 function repeatsRecentReply(reply, recentReplies) {
   const candidate = normalizeReply(reply);
   if (candidate.length < 18) return false;
+  const tokens = (value) => value.split(/\\s+/u).filter(Boolean);
   return recentReplies.some((previous) => {
     const normalized = normalizeReply(previous);
-    return normalized.length >= 18 && (candidate === normalized || (Math.min(candidate.length, normalized.length) / Math.max(candidate.length, normalized.length) > 0.75 && (candidate.startsWith(normalized.slice(0, 45)) || normalized.startsWith(candidate.slice(0, 45)))));
+    if (normalized.length < 18) return false;
+    if (candidate === normalized) return true;
+    const candidateTokens = new Set(tokens(candidate));
+    const previousTokens = new Set(tokens(normalized));
+    const smaller = candidateTokens.size <= previousTokens.size ? candidateTokens : previousTokens;
+    const larger = smaller === candidateTokens ? previousTokens : candidateTokens;
+    let shared = 0;
+    for (const token of smaller) if (larger.has(token)) shared += 1;
+    const overlap = smaller.size ? shared / smaller.size : 0;
+    const lengthRatio = Math.min(candidate.length, normalized.length) / Math.max(candidate.length, normalized.length);
+    return lengthRatio > 0.72 && overlap >= 0.88;
   });
 }
-
 function outfitChanged(text) {
   return /(?:переодел(?:ась|ся)?|одел(?:ась|ся)?|раздел(?:ась|ся)?|снял[а]?\s+(?:с\s+себя\s+)?(?:одежду|платье|рубашку|футболку|бель[её])|надел[а]?\s+(?:на\s+себя\s+)?(?:одежду|платье|рубашку|футболку|бель[её])|сменил[а]?\s+одежду|раздеваюсь|одеваюсь|переодеваюсь|сбросил[а]?\s+одежду|(?:теперь|сейчас|пусть|на тебе).{0,32}(?:голая|голый|обнаж[её]нн\w*|без одежды|одета в|одет в|рубашк\w*|футболк\w*|плать\w*|юбк\w*|бель[её])|(?:я|она)\s+(?:сейчас\s+)?(?:голая|обнаж[её]нная|без одежды)|put on (?:a |the )?(?:shirt|dress|clothes)|took off (?:her |my )?(?:clothes|shirt|dress)|got dressed|undressed|now wearing|wearing a (?:shirt|dress))/iu.test(String(text || ''));
 }
